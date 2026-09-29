@@ -30,7 +30,7 @@
         {% for permission in permissions %}
         <label class="form-check" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--border-color);border-radius:8px;">
           <input type="checkbox" name="permissions" value="{{ permission.code }}"
-            {% if permission in role_permissions %}checked{% endif %}>
+            {% if permission.code in role.assigned_permission_codes %}checked{% endif %}>
           <span><strong>{{ permission.name }}</strong><br><small>{{ permission.code }}</small></span>
         </label>
         {% endfor %}
