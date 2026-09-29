@@ -10,7 +10,7 @@ from django.views.generic import ListView, DetailView
 
 from apps.accounts.decorators import permission_required, system_admin_required
 from apps.accounts.models import User, Role, Permission, UserRole, RolePermission, PasswordResetToken, AdminRecoverySession
-from apps.accounts.services import AuthService, AdminRecoveryService, UserService
+from apps.accounts.services import AuthService, AdminRecoveryService, UserService, RolePermissionService
 from apps.audit.models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -210,6 +210,47 @@ class AdminRecoveryResetView(View):
 # ==============================================================================
 # System User Management Views (Requires "user.manage" or System Administrator)
 # ==============================================================================
+
+class RoleListView(View):
+    """Lists configurable roles and their assigned permissions."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator may manage role permissions.")
+
+        roles = Role.objects.filter(is_active=True).prefetch_related("role_permissions__permission")
+        permissions = Permission.objects.all().order_by("code")
+        return render(request, "accounts/role_list.html", {
+            "roles": roles,
+            "permissions": permissions,
+        })
+
+
+class RolePermissionUpdateView(View):
+    """Updates permissions for a configurable role."""
+
+    def post(self, request, role_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator may manage role permissions.")
+
+        role = get_object_or_404(Role, id=role_id)
+        permission_codes = request.POST.getlist("permissions")
+
+        try:
+            RolePermissionService.update_role_permissions(
+                actor=request.user,
+                role=role,
+                permission_codes=permission_codes,
+            )
+            messages.success(request, f"Permissions for '{role.name}' were updated.")
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+        return redirect("accounts:role_list")
+
 
 class UserListView(View):
     """Lists system users with search, role filters, and active state controls."""
