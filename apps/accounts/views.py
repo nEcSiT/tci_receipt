@@ -116,10 +116,6 @@ class AdminRecoveryInitiateView(View):
             }, status=400)
 
         request.session["recovery_session_token"] = session.session_token
-        # In development/test, keep raw OTPs in session for validation flow
-        request.session["dev_email_otp"] = email_otp
-        request.session["dev_phone_otp"] = phone_otp
-
         return redirect("accounts:recovery_verify")
 
 
@@ -139,8 +135,6 @@ class AdminRecoveryVerifyView(View):
 
         return render(request, "accounts/recovery_verify.html", {
             "session": session,
-            "dev_email_otp": request.session.get("dev_email_otp"),
-            "dev_phone_otp": request.session.get("dev_phone_otp"),
         })
 
     def post(self, request):
@@ -159,8 +153,6 @@ class AdminRecoveryVerifyView(View):
                 return render(request, "accounts/recovery_verify.html", {
                     "session": session,
                     "error": error,
-                    "dev_email_otp": request.session.get("dev_email_otp"),
-                    "dev_phone_otp": request.session.get("dev_phone_otp"),
                 }, status=400)
             messages.success(request, "Email OTP verified. Now enter your Phone OTP.")
             return redirect("accounts:recovery_verify")
@@ -210,8 +202,6 @@ class AdminRecoveryResetView(View):
 
         # Clear session recovery keys
         request.session.pop("recovery_session_token", None)
-        request.session.pop("dev_email_otp", None)
-        request.session.pop("dev_phone_otp", None)
 
         messages.success(request, "System Administrator password updated successfully. Please log in.")
         return redirect("accounts:login")
