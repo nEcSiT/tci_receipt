@@ -1311,7 +1311,7 @@ The milestone is complete when:
 - `M2-BT-017`: Repeated failed login attempts are throttled.
 - `M2-BT-018`: External post-login redirects are rejected.
 - All Milestone 1 tests continue passing.
-- Current M2 regression target: 44 automated tests.
+- Current M2 regression target: 46 automated tests.
 
 ---
 
