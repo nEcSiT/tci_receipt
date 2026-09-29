@@ -305,7 +305,16 @@ class UserService:
     ) -> User:
         """Creates a new System User with assigned role and permissions."""
         email = email.strip()
+
+        if not creator.is_active or not creator.is_system_administrator:
+            if not creator.has_permission("user.manage"):
+                raise ValidationError("Only an authorized System Administrator or System User with user.manage may create users.")
+
         role = Role.objects.get(name=role_name)
+
+        # System Administrator creation is reserved for the protected bootstrap/recovery path.
+        if role.name == Role.SYSTEM_ADMINISTRATOR:
+            raise ValidationError("A System User cannot create or assign the System Administrator role.")
 
         if role.name == Role.SYSTEM_ADMINISTRATOR:
             if UserRole.objects.filter(role__name=Role.SYSTEM_ADMINISTRATOR).exists():
