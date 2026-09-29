@@ -1,0 +1,96 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — TCI Higher Life Center</title>
+
+  <!-- Google Fonts: Cabin & Libre Baskerville -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+</head>
+<body>
+  <div class="auth-wrapper">
+    <!-- Left Branded Navy Area (#011345) -->
+    <div class="auth-brand-side">
+      <div class="auth-brand-header">
+        <h1>TCI Higher Life Center</h1>
+        <div class="sidebar-sublogo" style="margin-top: 4px;">Financial & Receipt Management System</div>
+      </div>
+
+      <div class="auth-brand-statement">
+        <h2>Jesus Saves, Heals & Satisfies</h2>
+        <p>
+          Raising disciples who disciple others. Secure financial administration, receipt verification, and trusted stewardship.
+        </p>
+      </div>
+
+      <div class="auth-brand-footer">
+        &copy; 2026 TCI Higher Life Center. All rights reserved.
+      </div>
+    </div>
+
+    <!-- Right Login Panel -->
+    <div class="auth-form-side">
+      <div class="auth-form-box">
+        <h2 class="auth-title">Welcome back</h2>
+        <p class="auth-subtitle">Sign in to your account to continue</p>
+
+        {% if error %}
+        <div class="alert alert-danger" style="margin-bottom: 24px;">
+          <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" style="margin-bottom: 24px;">
+          <span>{{ message }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <form method="post" action="{% url 'accounts:login' %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ next }}">
+
+          <div class="form-group">
+            <label class="form-label" for="id_email">Email address</label>
+            <input type="email" id="id_email" name="email" class="form-control" value="{{ email }}" placeholder="name@tcihlc.org" required autofocus>
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" for="id_password" style="margin-bottom: 0;">Password</label>
+              <a href="{% url 'accounts:password_reset' %}" style="font-size: 13px; font-weight: 500;">Forgot password?</a>
+            </div>
+            <input type="password" id="id_password" name="password" class="form-control" placeholder="••••••••••••" required>
+          </div>
+
+          <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 18px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" name="remember_me" style="accent-color: var(--brand-navy);">
+              <span>Remember me for 2 weeks</span>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">
+            Sign In
+          </button>
+        </form>
+
+        <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center;">
+          <span style="font-size: 13px; color: var(--text-muted);">
+            System Administrator locked out?
+            <a href="{% url 'accounts:recovery_initiate' %}" style="color: var(--brand-navy); font-weight: 600;">Use Admin Recovery</a>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

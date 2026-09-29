@@ -1,0 +1,725 @@
+/* ==========================================================================
+   TCI Higher Life Center — Digital Product Design System CSS
+   Version: 1.0 (Aligned with TCI-HLC-design.md)
+   ========================================================================== */
+
+:root {
+  /* 1. Brand Palette */
+  --brand-navy: #011345;
+  --brand-navy-hover: #0a2166;
+  --brand-green: #4ECB4D;
+  --brand-orange: #F16822;
+  --brand-orange-hover: #d95514;
+  --brand-yellow: #FEC313;
+  --brand-blue: #51ACFD;
+
+  /* 2. Neutral Palette */
+  --white: #FFFFFF;
+  --surface: #F7F8FA;
+  --surface-subtle: #F1F3F6;
+  --text-primary: #101828;
+  --text-secondary: #475467;
+  --text-muted: #667085;
+  --border: #D0D5DD;
+  --border-strong: #98A2B3;
+  --overlay: rgba(1, 19, 69, 0.8);
+
+  /* 3. Semantic States */
+  --success: #16803C;
+  --success-soft: #EAF7EE;
+  --warning: #A15C00;
+  --warning-soft: #FFF6D8;
+  --error: #B42318;
+  --error-soft: #FEECEB;
+  --info: #1769AA;
+  --info-soft: #EAF4FD;
+
+  /* 4. Typography Tokens */
+  --font-sans: 'Cabin', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Libre Baskerville', Georgia, serif;
+
+  /* 5. Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 6. Border Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* 7. Transitions & Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --transition: all 0.2s ease-in-out;
+}
+
+/* Base Reset & Typography */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.font-editorial {
+  font-family: var(--font-serif);
+}
+
+a {
+  color: var(--brand-blue);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Buttons (Section 10)
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 20px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn-primary {
+  background-color: var(--brand-orange);
+  color: var(--white);
+}
+.btn-primary:hover {
+  background-color: var(--brand-orange-hover);
+}
+
+.btn-secondary {
+  background-color: var(--brand-navy);
+  color: var(--white);
+}
+.btn-secondary:hover {
+  background-color: var(--brand-navy-hover);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--brand-navy);
+  border-color: var(--border-strong);
+}
+.btn-outline:hover {
+  background-color: var(--surface-subtle);
+}
+
+.btn-destructive {
+  background-color: var(--error);
+  color: var(--white);
+}
+.btn-destructive:hover {
+  background-color: #9b1e15;
+}
+
+.btn-success {
+  background-color: var(--success);
+  color: var(--white);
+}
+.btn-success:hover {
+  background-color: #126b32;
+}
+
+.btn-sm {
+  height: 36px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* ==========================================================================
+   Cards & Containers (Section 11)
+   ========================================================================== */
+.card {
+  background-color: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--surface-subtle);
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Metric Cards */
+.metric-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.metric-card.accent-green::before { background-color: var(--brand-green); }
+.metric-card.accent-orange::before { background-color: var(--brand-orange); }
+.metric-card.accent-blue::before { background-color: var(--brand-blue); }
+.metric-card.accent-yellow::before { background-color: var(--brand-yellow); }
+
+.metric-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.metric-subtext {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ==========================================================================
+   Badges (Section 14)
+   ========================================================================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.badge-success {
+  background-color: var(--success-soft);
+  color: var(--success);
+}
+
+.badge-warning {
+  background-color: var(--warning-soft);
+  color: var(--warning);
+}
+
+.badge-error {
+  background-color: var(--error-soft);
+  color: var(--error);
+}
+
+.badge-info {
+  background-color: var(--info-soft);
+  color: var(--info);
+}
+
+.badge-neutral {
+  background-color: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   Forms & Inputs (Section 12)
+   ========================================================================== */
+.form-group {
+  margin-bottom: var(--space-4);
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.form-helper {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.form-control {
+  width: 100%;
+  height: 44px;
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--text-primary);
+  background-color: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: var(--transition);
+}
+
+.form-control:focus {
+  border-color: var(--brand-navy);
+  box-shadow: 0 0 0 3px rgba(1, 19, 69, 0.1);
+}
+
+.form-control.is-invalid {
+  border-color: var(--error);
+}
+
+.form-error {
+  font-size: 13px;
+  color: var(--error);
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   Tables (Section 13)
+   ========================================================================== */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--white);
+  text-align: left;
+}
+
+.table th {
+  background-color: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--surface-subtle);
+  font-size: 14px;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background-color: rgba(1, 19, 69, 0.02);
+}
+
+.table .num-col {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Layout Shell (Section 8 & 9)
+   ========================================================================== */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.app-sidebar {
+  width: 260px;
+  background-color: var(--brand-navy);
+  color: var(--white);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: var(--transition);
+  position: relative;
+  z-index: 100;
+}
+
+.sidebar-header {
+  padding: 24px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--white);
+  text-decoration: none;
+}
+
+.sidebar-logo-text {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--white);
+}
+
+.sidebar-sublogo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-yellow);
+  font-weight: 600;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 12px;
+  overflow-y: auto;
+}
+
+.nav-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 12px 12px 6px;
+  font-weight: 600;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  margin-bottom: 4px;
+  text-decoration: none;
+  transition: var(--transition);
+  position: relative;
+}
+
+.nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--white);
+  text-decoration: none;
+}
+
+.nav-link.active {
+  background-color: rgba(241, 104, 34, 0.15);
+  color: var(--white);
+  font-weight: 600;
+}
+
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background-color: var(--brand-orange);
+  border-radius: 0 4px 4px 0;
+}
+
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Header & Main Area */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-header {
+  height: 64px;
+  background-color: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.breadcrumbs {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-profile-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--brand-navy);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.user-info {
+  line-height: 1.2;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.user-role-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.app-content {
+  padding: 32px;
+  flex: 1;
+}
+
+/* ==========================================================================
+   Alerts & Notifications
+   ========================================================================== */
+.alert {
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-left: 4px solid;
+}
+
+.alert-success {
+  background-color: var(--success-soft);
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.alert-warning {
+  background-color: var(--warning-soft);
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.alert-danger, .alert-error {
+  background-color: var(--error-soft);
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.alert-info {
+  background-color: var(--info-soft);
+  color: var(--info);
+  border-color: var(--info);
+}
+
+/* ==========================================================================
+   Authentication Screens (Section 22)
+   ========================================================================== */
+.auth-wrapper {
+  display: flex;
+  min-height: 100vh;
+}
+
+.auth-brand-side {
+  flex: 1;
+  background-color: var(--brand-navy);
+  color: var(--white);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 60px 48px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-brand-side::after {
+  content: '';
+  position: absolute;
+  bottom: -100px;
+  right: -100px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(241, 104, 34, 0.15) 0%, rgba(1, 19, 69, 0) 70%);
+  pointer-events: none;
+}
+
+.auth-brand-header h1 {
+  color: var(--white);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.auth-brand-statement {
+  max-width: 440px;
+  margin: auto 0;
+}
+
+.auth-brand-statement h2 {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  color: var(--white);
+  line-height: 1.3;
+  margin-bottom: 16px;
+  font-weight: 400;
+}
+
+.auth-brand-statement p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.auth-brand-footer {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.auth-form-side {
+  width: 480px;
+  background-color: var(--white);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px;
+}
+
+.auth-form-box {
+  width: 100%;
+}
+
+.auth-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .auth-wrapper {
+    flex-direction: column;
+  }
+  .auth-brand-side {
+    padding: 32px 24px;
+    min-height: auto;
+  }
+  .auth-brand-statement h2 {
+    font-size: 24px;
+  }
+  .auth-form-side {
+    width: 100%;
+    padding: 32px 24px;
+  }
+  .app-sidebar {
+    position: fixed;
+    left: -260px;
+    height: 100vh;
+  }
+  .app-sidebar.open {
+    left: 0;
+  }
+  .app-header {
+    padding: 0 16px;
+  }
+  .app-content {
+    padding: 16px;
+  }
+}

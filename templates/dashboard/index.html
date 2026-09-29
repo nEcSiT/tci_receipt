@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<div class="dashboard-header" style="margin-bottom: 28px;">
+  <h1 style="font-size: 26px; font-weight: 700; margin-bottom: 4px;">
+    {{ greeting }}, {{ user.first_name|default:"Minister" }}
+  </h1>
+  <p style="font-size: 15px; color: var(--text-secondary);">
+    Here's what's happening across TCI Higher Life Center today.
+  </p>
+</div>
+
+<!-- 4 Summary Metric Cards (Section 11 & 15) -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 32px;">
+  <!-- 1. Today's Contributions (Accent Green) -->
+  <div class="metric-card accent-green">
+    <div class="metric-label">Today's Contributions</div>
+    <div class="metric-value">GHS {{ today_contrib_total|floatformat:2 }}</div>
+    <div class="metric-subtext">{{ today_contrib_count }} confirmed contribution{{ today_contrib_count|pluralize }}</div>
+  </div>
+
+  <!-- 2. Receipts Generated (Accent Orange) -->
+  <div class="metric-card accent-orange">
+    <div class="metric-label">Receipts Generated</div>
+    <div class="metric-value">{{ receipts_count }}</div>
+    <div class="metric-subtext">Immutable receipt records</div>
+  </div>
+
+  <!-- 3. Pending Requisitions (Accent Blue) -->
+  <div class="metric-card accent-blue">
+    <div class="metric-label">Pending Requisitions</div>
+    <div class="metric-value">{{ pending_req_count }}</div>
+    <div class="metric-subtext">Awaiting review & approval</div>
+  </div>
+
+  <!-- 4. Manual Actions Required (Accent Yellow) -->
+  <div class="metric-card accent-yellow">
+    <div class="metric-label">Manual Actions</div>
+    <div class="metric-value">{{ manual_actions_count }}</div>
+    <div class="metric-subtext">Items awaiting action</div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- Left Column: Pending Actions & Workflows -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Pending Workflow Queue</h3>
+        <span class="badge badge-warning">{{ pending_req_count }} Active</span>
+      </div>
+
+      {% if pending_requisitions %}
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Tracking ID</th>
+              <th>Department</th>
+              <th>Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for req in pending_requisitions %}
+            <tr>
+              <td><strong>{{ req.requisition_id }}</strong></td>
+              <td>{{ req.department }}</td>
+              <td class="num-col">GHS {{ req.requested_amount|floatformat:2 }}</td>
+              <td>
+                <span class="badge badge-warning">{{ req.get_status_display }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
+        <p style="font-size: 14px;">No pending requisitions requiring attention right now.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Quick Action Launchpad -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Operational Shortcuts</h3>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        {% if is_system_administrator or user|has_perm:"contribution.create" %}
+        <a href="/contributions/create/" class="btn btn-primary btn-sm">
+          + Record Contribution
+        </a>
+        {% endif %}
+
+        {% if is_system_administrator or user|has_perm:"member.create" %}
+        <a href="/members/create/" class="btn btn-outline btn-sm">
+          + Register Member
+        </a>
+        {% endif %}
+
+        {% if is_system_administrator or user|has_perm:"user.manage" %}
+        <a href="{% url 'accounts:user_create' %}" class="btn btn-secondary btn-sm">
+          + Add System User
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Recent Activity (Immutable Audit Trail) -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Recent System Activity</h3>
+        <span class="badge badge-neutral">Audit Log</span>
+      </div>
+
+      {% if recent_activities %}
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        {% for log in recent_activities %}
+        <div style="display: flex; gap: 10px; font-size: 13px; padding-bottom: 12px; border-bottom: 1px solid var(--surface-subtle);">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--brand-orange); margin-top: 6px; flex-shrink: 0;"></div>
+          <div>
+            <div style="font-weight: 600; color: var(--text-primary);">
+              {{ log.action }}
+            </div>
+            <div style="color: var(--text-secondary); font-size: 12px;">
+              {{ log.user.full_name|default:log.actor_type }} on {{ log.entity_type }}
+            </div>
+            <div style="color: var(--text-muted); font-size: 11px;">
+              {{ log.created_at|timesince }} ago
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 24px 0;">
+        No recent audit events recorded.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

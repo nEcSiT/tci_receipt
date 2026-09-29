@@ -1,0 +1,97 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Recovery OTP — TCI Higher Life Center</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+</head>
+<body style="background-color: var(--surface); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px;">
+  <div class="card" style="width: 100%; max-width: 480px; padding: 40px; box-shadow: var(--shadow-md);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 8px;">Multi-Factor Authentication</h2>
+      
+      <!-- Progress Stepper -->
+      <div style="display: flex; justify-content: center; gap: 12px; margin: 18px 0;">
+        <span class="badge {% if session.email_verified %}badge-success{% else %}badge-warning{% endif %}">
+          1. Email OTP {% if session.email_verified %}✓{% endif %}
+        </span>
+        <span class="badge {% if session.phone_verified %}badge-success{% elif session.email_verified %}badge-warning{% else %}badge-neutral{% endif %}">
+          2. Phone OTP {% if session.phone_verified %}✓{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom: 20px;">
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" style="margin-bottom: 20px;">
+      <span>{{ message }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if not session.email_verified %}
+      <!-- Step 1: Email OTP Form -->
+      <form method="post" action="{% url 'accounts:recovery_verify' %}">
+        {% csrf_token %}
+        <input type="hidden" name="step" value="email">
+
+        <div class="form-group">
+          <label class="form-label" for="id_otp">Enter 6-Digit Email OTP</label>
+          <input type="text" id="id_otp" name="otp" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" required autofocus style="letter-spacing: 4px; font-size: 20px; text-align: center;">
+          <div class="form-helper" style="text-align: center;">A verification code was sent to the registered recovery email.</div>
+        </div>
+
+        {% if dev_email_otp %}
+        <div class="alert alert-info" style="font-size: 13px; margin-top: 10px;">
+          <strong>Development Mode OTP:</strong> {{ dev_email_otp }}
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">
+          Verify Email Code
+        </button>
+      </form>
+    {% else %}
+      <!-- Step 2: Phone OTP Form -->
+      <form method="post" action="{% url 'accounts:recovery_verify' %}">
+        {% csrf_token %}
+        <input type="hidden" name="step" value="phone">
+
+        <div class="form-group">
+          <label class="form-label" for="id_otp">Enter 6-Digit Phone SMS OTP</label>
+          <input type="text" id="id_otp" name="otp" class="form-control" placeholder="123456" maxlength="6" pattern="[0-9]{6}" required autofocus style="letter-spacing: 4px; font-size: 20px; text-align: center;">
+          <div class="form-helper" style="text-align: center;">A verification code was sent via SMS to the recovery phone.</div>
+        </div>
+
+        {% if dev_phone_otp %}
+        <div class="alert alert-info" style="font-size: 13px; margin-top: 10px;">
+          <strong>Development Mode OTP:</strong> {{ dev_phone_otp }}
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">
+          Verify Phone Code & Proceed
+        </button>
+      </form>
+    {% endif %}
+
+    <div style="text-align: center; margin-top: 24px;">
+      <a href="{% url 'accounts:login' %}" style="font-size: 14px; font-weight: 600; color: var(--text-secondary);">
+        Cancel Recovery
+      </a>
+    </div>
+  </div>
+</body>
+</html>

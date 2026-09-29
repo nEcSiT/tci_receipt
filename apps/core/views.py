@@ -1,7 +1,18 @@
-from django.http import JsonResponse
-from django.db import connection
-from django.core.cache import cache
 import logging
+from decimal import Decimal
+from django.db import connection
+from django.db.models import Sum
+from django.core.cache import cache
+from django.http import JsonResponse
+from django.shortcuts import render, redirect
+from django.utils import timezone
+from django.views import View
+
+from apps.accounts.models import User
+from apps.audit.models import AuditLog
+from apps.contributions.models import Contribution, ContributionStatus
+from apps.receipts.models import Receipt
+from apps.requisitions.models import Requisition, RequisitionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -46,3 +57,67 @@ def health_check(request):
         status["status"] = "unhealthy"
 
     return JsonResponse(status, status=http_status)
+
+
+def index_view(request):
+    """Landing redirector: sends authenticated users to dashboard and guests to login."""
+    if request.user.is_authenticated:
+        return redirect("core:dashboard")
+    return redirect("accounts:login")
+
+
+class DashboardView(View):
+    """Primary operational dashboard overview matching TCI Design System (Section 15)."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # 1. Metric: Today's Contributions
+        today_contributions = Contribution.objects.filter(
+            created_at__gte=today_start,
+            status=ContributionStatus.CONFIRMED,
+        )
+        today_contrib_count = today_contributions.count()
+        today_contrib_total = today_contributions.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+
+        # 2. Metric: Receipts Generated
+        receipts_count = Receipt.objects.count()
+
+        # 3. Metric: Pending Requisitions
+        pending_requisitions = Requisition.objects.filter(
+            status__in=[
+                RequisitionStatus.SUBMITTED,
+                RequisitionStatus.UNDER_REVIEW,
+                RequisitionStatus.PENDING_DISBURSEMENT,
+            ]
+        )
+        pending_req_count = pending_requisitions.count()
+
+        # 4. Metric: Manual Actions / Attention items
+        manual_actions_count = Requisition.objects.filter(status=RequisitionStatus.EVIDENCE_SUBMITTED).count()
+
+        # 5. Recent Activity Feed (Audit Log)
+        recent_activities = AuditLog.objects.select_related("user").all()[:8]
+
+        # Greeting logic
+        current_hour = timezone.now().hour
+        if current_hour < 12:
+            greeting = "Good morning"
+        elif current_hour < 17:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good evening"
+
+        return render(request, "dashboard/index.html", {
+            "greeting": greeting,
+            "today_contrib_count": today_contrib_count,
+            "today_contrib_total": today_contrib_total,
+            "receipts_count": receipts_count,
+            "pending_req_count": pending_req_count,
+            "manual_actions_count": manual_actions_count,
+            "recent_activities": recent_activities,
+            "pending_requisitions": pending_requisitions[:5],
+        })

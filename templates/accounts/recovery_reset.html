@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Admin Password — TCI Higher Life Center</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+</head>
+<body style="background-color: var(--surface); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px;">
+  <div class="card" style="width: 100%; max-width: 480px; padding: 40px; box-shadow: var(--shadow-md);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <span class="badge badge-success" style="margin-bottom: 12px;">MFA Verification Succeeded</span>
+      <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 8px;">Set New Administrator Password</h2>
+      <p style="font-size: 14px; color: var(--text-secondary);">
+        Both Email and Phone verification steps passed. Choose a new secure password.
+      </p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom: 20px;">
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'accounts:recovery_reset' %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label" for="id_new_password">New Administrator Password</label>
+        <input type="password" id="id_new_password" name="new_password" class="form-control" placeholder="••••••••••••" required autofocus>
+        <div class="form-helper">Must be at least 10 characters and pass standard complexity checks.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_confirm_password">Confirm New Password</label>
+        <input type="password" id="id_confirm_password" name="confirm_password" class="form-control" placeholder="••••••••••••" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">
+        Complete Recovery & Update Password
+      </button>
+    </form>
+  </div>
+</body>
+</html>

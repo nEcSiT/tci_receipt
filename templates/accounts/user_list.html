@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}System Users{% endblock %}
+{% block page_title %}System Users & Roles{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 4px;">System Users</h1>
+    <p style="font-size: 14px; color: var(--text-secondary);">Manage church administrative staff, roles, and system access.</p>
+  </div>
+  <a href="{% url 'accounts:user_create' %}" class="btn btn-primary">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add System User
+  </a>
+</div>
+
+<!-- Filters and Search Bar -->
+<div class="card" style="padding: 16px 20px; margin-bottom: 20px;">
+  <form method="get" action="{% url 'accounts:user_list' %}" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 200px;">
+      <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search by name or email..." style="height: 40px;">
+    </div>
+
+    <div>
+      <select name="status" class="form-control" style="height: 40px; padding-right: 28px;" onchange="this.form.submit()">
+        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Statuses</option>
+        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active Only</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive Only</option>
+      </select>
+    </div>
+
+    <div>
+      <select name="role" class="form-control" style="height: 40px; padding-right: 28px;" onchange="this.form.submit()">
+        <option value="all" {% if role_filter == 'all' %}selected{% endif %}>All Roles</option>
+        {% for r in roles %}
+        <option value="{{ r.name }}" {% if role_filter == r.name %}selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-secondary btn-sm" style="height: 40px;">
+      Filter
+    </button>
+    {% if query or status_filter != 'all' or role_filter != 'all' %}
+    <a href="{% url 'accounts:user_list' %}" class="btn btn-outline btn-sm" style="height: 40px;">
+      Clear
+    </a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- User Table (Section 13) -->
+<div class="table-responsive">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Last Login</th>
+        <th>Created</th>
+        <th style="text-align: right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>
+          <div style="font-weight: 600; color: var(--text-primary);">
+            <a href="{% url 'accounts:user_detail' user_id=u.id %}" style="color: var(--brand-navy);">
+              {{ u.full_name }}
+            </a>
+          </div>
+          <div style="font-size: 13px; color: var(--text-muted);">{{ u.email }}</div>
+        </td>
+        <td>
+          {% for ur in u.user_roles.all %}
+            <span class="badge {% if ur.role.name == 'System Administrator' %}badge-warning{% else %}badge-neutral{% endif %}">
+              {{ ur.role.name }}
+            </span>
+          {% empty %}
+            <span class="badge badge-neutral">No role</span>
+          {% endfor %}
+        </td>
+        <td>
+          {% if u.is_active %}
+            <span class="badge badge-success">Active</span>
+          {% else %}
+            <span class="badge badge-error">Inactive</span>
+          {% endif %}
+        </td>
+        <td style="font-size: 13px; color: var(--text-secondary);">
+          {% if u.last_login_at %}{{ u.last_login_at|date:"d M Y H:i" }}{% else %}<span style="color: var(--text-muted);">Never</span>{% endif %}
+        </td>
+        <td style="font-size: 13px; color: var(--text-secondary);">
+          {{ u.created_at|date:"d M Y" }}
+        </td>
+        <td style="text-align: right;">
+          <div style="display: inline-flex; gap: 8px;">
+            <a href="{% url 'accounts:user_detail' user_id=u.id %}" class="btn btn-outline btn-sm" style="padding: 4px 10px; height: 32px;">
+              View
+            </a>
+            <a href="{% url 'accounts:user_edit' user_id=u.id %}" class="btn btn-outline btn-sm" style="padding: 4px 10px; height: 32px;">
+              Edit
+            </a>
+            {% if not u.is_system_administrator %}
+            <form method="post" action="{% url 'accounts:user_toggle_status' user_id=u.id %}" style="display: inline;">
+              {% csrf_token %}
+              {% if u.is_active %}
+                <input type="hidden" name="action" value="deactivate">
+                <button type="submit" class="btn btn-destructive btn-sm" style="padding: 4px 10px; height: 32px;" onclick="return confirm('Deactivate {{ u.full_name }}? They will not be able to log in.');">
+                  Deactivate
+                </button>
+              {% else %}
+                <input type="hidden" name="action" value="activate">
+                <button type="submit" class="btn btn-success btn-sm" style="padding: 4px 10px; height: 32px;">
+                  Activate
+                </button>
+              {% endif %}
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+          No users match the selected filters.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

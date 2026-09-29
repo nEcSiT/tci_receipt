@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{{ target_user.full_name }} — User Details{% endblock %}
+{% block page_title %}User Details{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 24px;">
+  <a href="{% url 'accounts:user_list' %}" style="font-size: 14px; font-weight: 600; color: var(--brand-navy);">
+    &larr; Back to Users List
+  </a>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- User Profile Information -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{{ target_user.full_name }}</h2>
+        <div style="display: flex; gap: 8px;">
+          {% if target_user.is_active %}
+            <span class="badge badge-success">Active</span>
+          {% else %}
+            <span class="badge badge-error">Inactive</span>
+          {% endif %}
+          <a href="{% url 'accounts:user_edit' user_id=target_user.id %}" class="btn btn-outline btn-sm">
+            Edit
+          </a>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 14px;">
+        <div>
+          <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Email Address</div>
+          <div style="font-weight: 600; margin-top: 4px;">{{ target_user.email }}</div>
+        </div>
+
+        <div>
+          <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Assigned Role</div>
+          <div style="margin-top: 4px;">
+            {% for ur in target_user.user_roles.all %}
+              <span class="badge {% if ur.role.name == 'System Administrator' %}badge-warning{% else %}badge-neutral{% endif %}">
+                {{ ur.role.name }}
+              </span>
+            {% empty %}
+              <span style="color: var(--text-muted);">None</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div>
+          <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Created On</div>
+          <div style="margin-top: 4px;">{{ target_user.created_at|date:"d M Y, H:i" }}</div>
+        </div>
+
+        <div>
+          <div style="color: var(--text-muted); font-size: 12px; text-transform: uppercase;">Last Login</div>
+          <div style="margin-top: 4px;">
+            {% if target_user.last_login_at %}
+              {{ target_user.last_login_at|date:"d M Y, H:i" }}
+            {% else %}
+              <span style="color: var(--text-muted);">Never logged in</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fine-Grained Permissions List -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Effective System Permissions</h3>
+      </div>
+      <div>
+        {% if target_user.is_system_administrator %}
+        <div class="alert alert-info">
+          As the <strong>System Administrator</strong>, this user has full, unrestricted access to all system features.
+        </div>
+        {% else %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+          {% for perm in target_user.get_all_permission_codes %}
+          <div style="padding: 8px 12px; background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px;">
+            <code style="color: var(--brand-navy); font-weight: 600;">{{ perm }}</code>
+          </div>
+          {% empty %}
+          <p style="color: var(--text-muted); font-size: 13px;">No permissions assigned.</p>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- User Audit Trail -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">User Audit Trail</h3>
+      </div>
+      {% if user_audit_logs %}
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        {% for log in user_audit_logs %}
+        <div style="font-size: 13px; padding-bottom: 10px; border-bottom: 1px solid var(--surface-subtle);">
+          <div style="font-weight: 600;">{{ log.action }}</div>
+          <div style="color: var(--text-muted); font-size: 11px;">
+            {{ log.created_at|date:"d M Y H:i:s" }} &bull; {{ log.result }}
+          </div>
+          {% if log.reason %}
+          <div style="color: var(--text-secondary); font-size: 12px; margin-top: 2px;">{{ log.reason }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0;">
+        No audit activity found for this user.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

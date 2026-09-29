@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Role, Permission, UserRole, RolePermission
+from .models import User, Role, Permission, UserRole, RolePermission, PasswordResetToken, AdminRecoverySession
 
 
 @admin.register(User)
@@ -28,3 +28,15 @@ class UserRoleAdmin(admin.ModelAdmin):
 @admin.register(RolePermission)
 class RolePermissionAdmin(admin.ModelAdmin):
     list_display = ("role", "permission", "assigned_at", "assigned_by")
+
+
+@admin.register(PasswordResetToken)
+class PasswordResetTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "expires_at", "is_used", "created_at")
+    list_filter = ("is_used",)
+
+
+@admin.register(AdminRecoverySession)
+class AdminRecoverySessionAdmin(admin.ModelAdmin):
+    list_display = ("session_token", "email_verified", "phone_verified", "is_completed", "expires_at", "created_at")
+    list_filter = ("email_verified", "phone_verified", "is_completed")

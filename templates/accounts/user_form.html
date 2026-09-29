@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}Add System User{% else %}Edit {{ target_user.full_name }}{% endif %}{% endblock %}
+{% block page_title %}{% if is_create %}Create New User{% else %}Edit User Profile{% endif %}{% endblock %}
+
+{% block content %}
+<div style="max-width: 680px; margin: 0 auto;">
+  <div style="margin-bottom: 24px;">
+    <a href="{% url 'accounts:user_list' %}" style="font-size: 14px; font-weight: 600; color: var(--brand-navy);">
+      &larr; Back to Users List
+    </a>
+    <h1 style="font-size: 24px; font-weight: 700; margin-top: 8px;">
+      {% if is_create %}Add New System User{% else %}Edit {{ target_user.full_name }}{% endif %}
+    </h1>
+    <p style="font-size: 14px; color: var(--text-secondary);">
+      {% if is_create %}Create internal church administrative staff account with role assignments.{% else %}Update user profile details and role.{% endif %}
+    </p>
+  </div>
+
+  <div class="card" style="padding: 32px;">
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom: 24px;">
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="post" action="">
+      {% csrf_token %}
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="form-group">
+          <label class="form-label" for="id_first_name">First Name *</label>
+          <input type="text" id="id_first_name" name="first_name" class="form-control" value="{% if form_data %}{{ form_data.first_name }}{% elif target_user %}{{ target_user.first_name }}{% endif %}" required autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="id_last_name">Last Name *</label>
+          <input type="text" id="id_last_name" name="last_name" class="form-control" value="{% if form_data %}{{ form_data.last_name }}{% elif target_user %}{{ target_user.last_name }}{% endif %}" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_email">Official Email Address *</label>
+        <input type="email" id="id_email" name="email" class="form-control" value="{% if form_data %}{{ form_data.email }}{% elif target_user %}{{ target_user.email }}{% endif %}" placeholder="staff@tcihlc.org" {% if not is_create %}readonly style="background-color: var(--surface-subtle);"{% else %}required{% endif %}>
+        {% if not is_create %}
+        <div class="form-helper">Email address cannot be modified after account creation.</div>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_role">Assigned Role *</label>
+        <select id="id_role" name="role_name" class="form-control">
+          {% for r in roles %}
+          <option value="{{ r.name }}" {% if target_user and target_user.user_roles.first.role == r %}selected{% elif form_data and form_data.role_name == r.name %}selected{% endif %}>
+            {{ r.name }} — {{ r.description|default:"" }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-helper">Note: Exactly one System Administrator may exist across the system.</div>
+      </div>
+
+      {% if is_create %}
+      <div class="form-group">
+        <label class="form-label" for="id_password">Initial Password (Optional)</label>
+        <input type="password" id="id_password" name="password" class="form-control" placeholder="Leave blank to generate secure temporary password">
+        <div class="form-helper">If left blank, a secure password will be automatically assigned.</div>
+      </div>
+      {% endif %}
+
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 32px; border-top: 1px solid var(--surface-subtle); padding-top: 20px;">
+        <a href="{% url 'accounts:user_list' %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_create %}Create System User{% else %}Save Changes{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
