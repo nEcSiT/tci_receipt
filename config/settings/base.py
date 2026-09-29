@@ -114,6 +114,14 @@ MEDIA_ROOT = Path(env("STORAGE_DIR"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Shared cache for login throttling and other short-lived application state.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("REDIS_URL"),
+    }
+}
+
 # Session Security
 SESSION_COOKIE_AGE = env.int("SESSION_COOKIE_AGE", default=1800)  # 30 minutes
 SESSION_EXPIRE_AT_BROWSER_CLOSE = env.bool("SESSION_EXPIRE_AT_BROWSER_CLOSE", default=True)
