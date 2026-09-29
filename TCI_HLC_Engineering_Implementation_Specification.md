@@ -1277,7 +1277,8 @@ The milestone is complete when:
   - System Administrator multi-factor recovery (Email OTP → Phone OTP)
   - Role and permission enforcement (URL, View, Service, Template layers)
   - System User management (List, search, filter, view details, create user, deactivate user)
-  - Permission assignment (Roles, role permissions, assigning/removing permissions)
+  - Role management (System Administrator creates custom roles and assigns/removes permissions under each role)
+  - Permission assignment (System Users receive access through an administrator-created role)
   - Core application layout (Responsive sidebar, top navigation, user profile menu, notification area, flash messages)
   - Dashboard (Welcome section, summary cards, recent activity, pending manual actions, module placeholders)
   - Permission-aware UI
@@ -1306,12 +1307,14 @@ The milestone is complete when:
 - `M2-BT-012`: All security and administrative actions produce immutable audit records.
 - `M2-BT-013`: System User cannot create or assign the System Administrator role through the service layer.
 - `M2-BT-014`: User management authorization is enforced at the service layer.
-- `M2-BT-015`: System Administrator can assign/remove permissions for the System User role.
-- `M2-BT-016`: System User cannot access role permission management.
+- `M2-BT-015`: System Administrator can create and configure custom roles with selected permissions.
+- `M2-BT-016`: System User cannot access role management.
+- `M2-BT-019`: System User creation exposes only System Administrator-created custom roles.
+- `M2-BT-020`: Custom role pages display and configure the permissions assigned to that role.
 - `M2-BT-017`: Repeated failed login attempts are throttled.
 - `M2-BT-018`: External post-login redirects are rejected.
 - All Milestone 1 tests continue passing.
-- Current M2 regression target: 46 automated tests.
+- Current M2 regression target: 48 automated tests.
 
 ---
 
@@ -1434,8 +1437,9 @@ Implementation decisions already established include:
 - Django + PostgreSQL architecture
 - modular monolith
 - 25 core logical tables plus `requisition_attachments` identified during implementation validation
-- exactly one System Administrator
-- configurable permissions
+- exactly one seeded System Administrator
+- administrator-created configurable roles, each containing a selected set of permissions
+- System Users are assigned custom roles; System Administrator is never a selectable user role
 - protected `.env` administrator recovery contacts
 - strict transaction-phone contributor matching
 - immutable automatic receipts
