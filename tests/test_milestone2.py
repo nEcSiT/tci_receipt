@@ -1,6 +1,7 @@
 import datetime
 import pytest
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.urls import reverse
 from django.utils import timezone
@@ -303,3 +304,36 @@ def test_m2_bt_016_system_user_cannot_configure_roles(client, seed_data, system_
     client.force_login(system_user)
     response = client.get(reverse("accounts:role_list"))
     assert response.status_code == 403
+
+
+def test_m2_bt_017_failed_login_throttling(client, seed_data):
+    """M2-BT-017: Repeated failed login attempts are throttled."""
+    cache.clear()
+    for _ in range(5):
+        response = client.post(reverse("accounts:login"), {
+            "email": "unknown@tcihlc.org",
+            "password": "WrongPassword123!",
+        })
+        assert response.status_code == 401
+
+    response = client.post(reverse("accounts:login"), {
+        "email": "unknown@tcihlc.org",
+        "password": "WrongPassword123!",
+    })
+    assert response.status_code == 401
+    assert "Too many failed login attempts" in response.content.decode()
+    cache.clear()
+
+
+def test_m2_bt_018_external_login_redirect_is_rejected(client, seed_data, system_admin):
+    """M2-BT-018: External post-login redirects are not accepted."""
+    response = client.post(
+        reverse("accounts:login"),
+        {
+            "email": settings.SYSTEM_ADMIN_EMAIL,
+            "password": settings.SYSTEM_ADMIN_INITIAL_PASSWORD,
+            "next": "https://example.com/phishing",
+        },
+    )
+    assert response.status_code == 302
+    assert response.url == reverse("core:dashboard")
