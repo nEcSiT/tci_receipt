@@ -112,7 +112,7 @@ class Command(BaseCommand):
                     "first_name": "System",
                     "last_name": "Administrator",
                     "is_active": True,
-                    "is_staff": True,
+                    "is_staff": False,
                 }
             )
             if created:
