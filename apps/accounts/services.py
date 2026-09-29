@@ -316,10 +316,6 @@ class UserService:
         if role.name == Role.SYSTEM_ADMINISTRATOR:
             raise ValidationError("A System User cannot create or assign the System Administrator role.")
 
-        if role.name == Role.SYSTEM_ADMINISTRATOR:
-            if UserRole.objects.filter(role__name=Role.SYSTEM_ADMINISTRATOR).exists():
-                raise ValidationError("Exactly one System Administrator may exist in the system.")
-
         password = initial_password or secrets.token_urlsafe(16)
         user = User.objects.create_user(
             email=email,
@@ -356,6 +352,12 @@ class UserService:
         role_name: str | None = None,
     ) -> User:
         """Updates user details and role."""
+        if not actor.is_active or (not actor.is_system_administrator and not actor.has_permission("user.manage")):
+            raise ValidationError("You do not have permission to manage system users.")
+
+        if role_name == Role.SYSTEM_ADMINISTRATOR and not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator may manage the System Administrator role.")
+
         old_values = {
             "first_name": user.first_name,
             "last_name": user.last_name,
