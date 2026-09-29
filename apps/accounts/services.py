@@ -2,6 +2,7 @@ import datetime
 import hashlib
 import secrets
 import uuid
+import logging
 from django.conf import settings
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.core.mail import send_mail
@@ -11,6 +12,8 @@ from django.utils import timezone
 from apps.accounts.models import User, Role, Permission, UserRole, RolePermission, PasswordResetToken, AdminRecoverySession
 from apps.audit.models import AuditResult
 from apps.audit.services import AuditService
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -209,6 +212,25 @@ class AdminRecoveryService:
             phone_otp_hash=phone_otp_hash,
             expires_at=expires_at,
         )
+
+        try:
+            send_mail(
+                subject="TCI HLC — Administrator Recovery OTP",
+                message=f"Your administrator recovery Email OTP is {email_otp}. It expires in 15 minutes.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[admin_user.email],
+                fail_silently=False,
+            )
+        except Exception:
+            AuditService.log(
+                action="ADMIN_RECOVERY_EMAIL_FAILED",
+                entity_type="AdminRecoverySession",
+                entity_id=session.id,
+                result=AuditResult.FAILURE,
+            )
+
+        if settings.DEBUG:
+            logger.warning("LOCAL DEVELOPMENT ONLY — administrator Phone OTP: %s", phone_otp)
 
         AuditService.log(
             action="ADMIN_RECOVERY_INITIATED",
