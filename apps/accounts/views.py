@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, DetailView
@@ -30,7 +31,12 @@ class LoginView(View):
         email = request.POST.get("email", "")
         password = request.POST.get("password", "")
         remember_me = request.POST.get("remember_me") == "on"
-        next_url = request.POST.get("next") or "core:dashboard"
+        requested_next = request.POST.get("next", "")
+        next_url = requested_next if url_has_allowed_host_and_scheme(
+            requested_next,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ) else reverse("core:dashboard")
 
         user, error = AuthService.authenticate_and_login(
             request, email=email, password=password, remember_me=remember_me
