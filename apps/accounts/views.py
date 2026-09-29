@@ -66,13 +66,10 @@ class PasswordResetRequestView(View):
 
     def post(self, request):
         email = request.POST.get("email", "")
-        success, raw_token = AuthService.request_password_reset(email)
+        reset_url = request.build_absolute_uri(reverse("accounts:password_reset_confirm", kwargs={"token": "TOKEN_PLACEHOLDER"}))
+        success, raw_token = AuthService.request_password_reset(email, reset_url=reset_url.replace("TOKEN_PLACEHOLDER", raw_token) if raw_token else None)
 
-        # For development and test accessibility, pass token to template context if present
-        return render(request, "accounts/password_reset_sent.html", {
-            "email": email,
-            "reset_token": raw_token,
-        })
+        return render(request, "accounts/password_reset_sent.html", {"email": email})
 
 
 class PasswordResetConfirmView(View):
