@@ -1,7 +1,7 @@
 # TCI Higher Life Center — Receipt & Financial Management System
 
 **Version:** 1.0  
-**Stack:** Python 3.10+ / Django 5.2.x / PostgreSQL 18.x / Redis / Celery 5.6.x / Docker & Compose / WeasyPrint
+**Stack:** Python 3.11 / Django 5.2.x / PostgreSQL 17.x / Redis / Celery 5.6.x / Docker & Compose / WeasyPrint
 
 ---
 
