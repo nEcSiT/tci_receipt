@@ -337,3 +337,34 @@ def test_m2_bt_018_external_login_redirect_is_rejected(client, seed_data, system
     )
     assert response.status_code == 302
     assert response.url == reverse("core:dashboard")
+
+
+def test_m2_bt_019_user_creation_exposes_only_custom_roles(client, seed_data, system_admin):
+    """M2-BT-019: Create User must not expose protected system roles."""
+    role = Role.objects.create(name="Finance Officer", description="Handles finance operations")
+    client.force_login(system_admin)
+
+    response = client.get(reverse("accounts:user_create"))
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    assert "Finance Officer" in content
+    assert "System Administrator" not in content
+    assert "System User" not in content
+
+
+def test_m2_bt_020_role_page_shows_permissions_for_custom_roles(client, seed_data, system_admin):
+    """M2-BT-020: System Administrator can see and configure permissions under custom roles."""
+    role = Role.objects.create(name="Finance Officer", description="Handles finance operations")
+    permission = Permission.objects.get(code="contribution.create")
+    RolePermission.objects.create(role=role, permission=permission, assigned_by=system_admin)
+
+    client.force_login(system_admin)
+    response = client.get(reverse("accounts:role_list"))
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    assert "Finance Officer" in content
+    assert "Create Contribution" in content
+    assert "System Administrator" not in content
+    assert "System User" not in content
