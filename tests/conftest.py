@@ -24,13 +24,16 @@ def system_admin(seed_data):
 
 @pytest.fixture
 def system_user(seed_data):
-    """Creates and returns an active System User."""
+    """Creates and returns an active System User assigned to a custom role."""
+    role = Role.objects.create(name="Finance Officer", description="Test finance role")
+    from apps.accounts.models import Permission, RolePermission
+    RolePermission.objects.create(role=role, permission=Permission.objects.get(code="contribution.create"))
+    RolePermission.objects.create(role=role, permission=Permission.objects.get(code="requisition.view"))
     user = User.objects.create_user(
         email="officer@tcihlc.org",
         password="ValidPassword123!",
         first_name="Finance",
         last_name="Officer"
     )
-    user_role = Role.objects.get(name=Role.SYSTEM_USER)
-    UserRole.objects.create(user=user, role=user_role)
+    UserRole.objects.create(user=user, role=role)
     return user
