@@ -87,3 +87,55 @@ def test_user_cannot_persist_django_staff_flag(system_admin):
 
     assert system_admin.is_staff is False
     assert system_admin.is_system_administrator is True
+
+
+def test_system_admin_creates_custom_role_and_permissions(system_admin, seed_data):
+    """Roles are created by the System Administrator and contain selected permissions."""
+    from apps.accounts.services import RoleService, RolePermissionService
+
+    role = RoleService.create_role(system_admin, "Finance Officer", "Handles finance operations")
+    RolePermissionService.update_role_permissions(
+        system_admin,
+        role,
+        ["contribution.create", "report.view"],
+    )
+
+    role.refresh_from_db()
+    assert role.name == "Finance Officer"
+    assert set(role.role_permissions.values_list("permission__code", flat=True)) == {
+        "contribution.create", "report.view"
+    }
+
+
+def test_protected_roles_cannot_be_created_or_assigned(system_admin, seed_data):
+    """Protected role names cannot be created or assigned to System Users."""
+    from apps.accounts.services import RoleService, UserService
+
+    with pytest.raises(ValidationError, match="reserved"):
+        RoleService.create_role(system_admin, Role.SYSTEM_ADMINISTRATOR)
+    with pytest.raises(ValidationError, match="reserved"):
+        RoleService.create_role(system_admin, Role.SYSTEM_USER)
+
+    custom_role = RoleService.create_role(system_admin, "Operations Officer")
+    user = UserService.create_system_user(
+        creator=system_admin,
+        email="operations@tcihlc.org",
+        first_name="Operations",
+        last_name="Officer",
+        role_name=custom_role.name,
+        initial_password="SecurePassword123!",
+    )
+    assert user.user_roles.filter(role=custom_role).exists()
+
+
+def test_system_administrator_cannot_be_edited_as_system_user(system_admin):
+    from apps.accounts.services import UserService
+
+    with pytest.raises(ValidationError, match="protected System Administrator"):
+        UserService.update_system_user(
+            actor=system_admin,
+            user=system_admin,
+            first_name="Changed",
+            last_name="Admin",
+            role_name="Finance Officer",
+        )
