@@ -93,7 +93,7 @@ class AuthService:
         auth_logout(request)
 
     @classmethod
-    def request_password_reset(cls, email: str, reset_url: str | None = None) -> tuple[bool, str | None]:
+    def request_password_reset(cls, email: str, reset_url_base: str | None = None) -> tuple[bool, str | None]:
         """
         Generates a secure, single-use, expiring token.
         Always returns True to prevent user enumeration.
@@ -114,7 +114,8 @@ class AuthService:
             expires_at=expires_at,
         )
 
-        if reset_url:
+        if reset_url_base:
+            reset_url = f"{reset_url_base}{raw_token}/"
             try:
                 send_mail(
                     subject="TCI HLC — Password Reset",
