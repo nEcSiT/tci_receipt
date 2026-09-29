@@ -54,3 +54,36 @@ def test_password_reset_token_validity(system_user):
     token.is_used = True
     token.save()
     assert token.is_valid is False
+
+
+def test_alternate_administrator_creation_paths_are_disabled(seed_data, system_admin):
+    """No alternate Django staff/superuser path may create another administrator."""
+    with pytest.raises(ValueError, match="superuser creation is disabled"):
+        User.objects.create_superuser(
+            email="second.superadmin@tcihlc.org",
+            password="ValidPassword123!",
+            first_name="Second",
+            last_name="Administrator",
+        )
+
+    with pytest.raises(ValueError, match="staff/admin accounts are disabled"):
+        User.objects.create_user(
+            email="second.staff@tcihlc.org",
+            password="ValidPassword123!",
+            first_name="Second",
+            last_name="Staff",
+            is_staff=True,
+        )
+
+    assert User.objects.filter(is_staff=True).count() == 0
+    assert UserRole.objects.filter(role__name=Role.SYSTEM_ADMINISTRATOR).count() == 1
+
+
+def test_user_cannot_persist_django_staff_flag(system_admin):
+    """Django's staff flag cannot be used as a second privileged identity."""
+    system_admin.is_staff = True
+    system_admin.save(update_fields=["is_staff"])
+    system_admin.refresh_from_db()
+
+    assert system_admin.is_staff is False
+    assert system_admin.is_system_administrator is True
