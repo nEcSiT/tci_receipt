@@ -1264,7 +1264,7 @@ The milestone is complete when:
 # 25.1 SECOND IMPLEMENTATION MILESTONE — MILESTONE 2
 
 **Milestone:** M2 — Authentication, Authorization & Core Application UI  
-**Status:** Completed (100% Verified, 38/38 automated tests passing)  
+**Status:** Completed — M2 consistency fixes and role-permission management added; local runtime verification pending  
 **Depends on:** M1 — Core Infrastructure & PostgreSQL Data Model  
 **Objective:** Build and validate the complete authentication, authorization, system administration, and initial browser-based application interface using the real Django backend and PostgreSQL database.
 
@@ -1304,7 +1304,12 @@ The milestone is complete when:
 - `M2-BT-010`: Expired password reset token is rejected.
 - `M2-BT-011`: System Administrator recovery via dynamic Email OTP + Phone OTP.
 - `M2-BT-012`: All security and administrative actions produce immutable audit records.
+- `M2-BT-013`: System User cannot create or assign the System Administrator role through the service layer.
+- `M2-BT-014`: User management authorization is enforced at the service layer.
+- `M2-BT-015`: System Administrator can assign/remove permissions for the System User role.
+- `M2-BT-016`: System User cannot access role permission management.
 - All Milestone 1 tests continue passing.
+- Current M2 regression target: 42 automated tests.
 
 ---
 
