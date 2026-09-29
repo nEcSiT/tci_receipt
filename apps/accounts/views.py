@@ -4,13 +4,14 @@ from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView, DetailView
 
 from apps.accounts.decorators import permission_required, system_admin_required
 from apps.accounts.models import User, Role, Permission, UserRole, RolePermission, PasswordResetToken, AdminRecoverySession
-from apps.accounts.services import AuthService, AdminRecoveryService, UserService
+from apps.accounts.services import AuthService, AdminRecoveryService, UserService, RoleService, RolePermissionService
 from apps.audit.models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,12 @@ class LoginView(View):
         email = request.POST.get("email", "")
         password = request.POST.get("password", "")
         remember_me = request.POST.get("remember_me") == "on"
-        next_url = request.POST.get("next") or "core:dashboard"
+        requested_next = request.POST.get("next", "")
+        next_url = requested_next if url_has_allowed_host_and_scheme(
+            requested_next,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ) else reverse("core:dashboard")
 
         user, error = AuthService.authenticate_and_login(
             request, email=email, password=password, remember_me=remember_me
@@ -66,13 +72,10 @@ class PasswordResetRequestView(View):
 
     def post(self, request):
         email = request.POST.get("email", "")
-        success, raw_token = AuthService.request_password_reset(email)
+        reset_url_base = request.build_absolute_uri("/password-reset/confirm/")
+        success, raw_token = AuthService.request_password_reset(email, reset_url_base=reset_url_base)
 
-        # For development and test accessibility, pass token to template context if present
-        return render(request, "accounts/password_reset_sent.html", {
-            "email": email,
-            "reset_token": raw_token,
-        })
+        return render(request, "accounts/password_reset_sent.html", {"email": email})
 
 
 class PasswordResetConfirmView(View):
@@ -119,10 +122,6 @@ class AdminRecoveryInitiateView(View):
             }, status=400)
 
         request.session["recovery_session_token"] = session.session_token
-        # In development/test, keep raw OTPs in session for validation flow
-        request.session["dev_email_otp"] = email_otp
-        request.session["dev_phone_otp"] = phone_otp
-
         return redirect("accounts:recovery_verify")
 
 
@@ -142,8 +141,6 @@ class AdminRecoveryVerifyView(View):
 
         return render(request, "accounts/recovery_verify.html", {
             "session": session,
-            "dev_email_otp": request.session.get("dev_email_otp"),
-            "dev_phone_otp": request.session.get("dev_phone_otp"),
         })
 
     def post(self, request):
@@ -162,8 +159,6 @@ class AdminRecoveryVerifyView(View):
                 return render(request, "accounts/recovery_verify.html", {
                     "session": session,
                     "error": error,
-                    "dev_email_otp": request.session.get("dev_email_otp"),
-                    "dev_phone_otp": request.session.get("dev_phone_otp"),
                 }, status=400)
             messages.success(request, "Email OTP verified. Now enter your Phone OTP.")
             return redirect("accounts:recovery_verify")
@@ -213,8 +208,6 @@ class AdminRecoveryResetView(View):
 
         # Clear session recovery keys
         request.session.pop("recovery_session_token", None)
-        request.session.pop("dev_email_otp", None)
-        request.session.pop("dev_phone_otp", None)
 
         messages.success(request, "System Administrator password updated successfully. Please log in.")
         return redirect("accounts:login")
@@ -223,6 +216,68 @@ class AdminRecoveryResetView(View):
 # ==============================================================================
 # System User Management Views (Requires "user.manage" or System Administrator)
 # ==============================================================================
+
+class RoleListView(View):
+    """Lists configurable roles and their assigned permissions."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator may manage role permissions.")
+
+        roles = list(Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER]).prefetch_related("role_permissions__permission"))
+        permissions = Permission.objects.all().order_by("code")
+        for role in roles:
+            role.assigned_permission_codes = {rp.permission.code for rp in role.role_permissions.all()}
+        return render(request, "accounts/role_list.html", {
+            "roles": roles,
+            "permissions": permissions,
+        })
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator may manage roles.")
+
+        try:
+            role = RoleService.create_role(
+                actor=request.user,
+                name=request.POST.get("name", ""),
+                description=request.POST.get("description", ""),
+            )
+            messages.success(request, f"Role '{role.name}' was created successfully. You can now assign its permissions.")
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+        return redirect("accounts:role_list")
+
+
+class RolePermissionUpdateView(View):
+    """Updates permissions for a configurable role."""
+
+    def post(self, request, role_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator may manage role permissions.")
+
+        role = get_object_or_404(Role, id=role_id)
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise PermissionDenied("Protected system roles cannot be configured here.")
+        permission_codes = request.POST.getlist("permissions")
+
+        try:
+            RolePermissionService.update_role_permissions(
+                actor=request.user,
+                role=role,
+                permission_codes=permission_codes,
+            )
+            messages.success(request, f"Permissions for '{role.name}' were updated.")
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+        return redirect("accounts:role_list")
+
 
 class UserListView(View):
     """Lists system users with search, role filters, and active state controls."""
@@ -254,7 +309,7 @@ class UserListView(View):
         if role_filter != "all":
             users = users.filter(user_roles__role__name=role_filter)
 
-        roles = Role.objects.filter(is_active=True)
+        roles = Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER])
 
         return render(request, "accounts/user_list.html", {
             "users": users,
@@ -289,7 +344,7 @@ class UserCreateView(View):
         email = request.POST.get("email", "").strip()
         first_name = request.POST.get("first_name", "").strip()
         last_name = request.POST.get("last_name", "").strip()
-        role_name = request.POST.get("role_name", Role.SYSTEM_USER)
+        role_name = request.POST.get("role_name", "").strip()
         initial_password = request.POST.get("password", "").strip() or None
 
         try:
@@ -357,7 +412,7 @@ class UserEditView(View):
         user = get_object_or_404(User, id=user_id)
         first_name = request.POST.get("first_name", "").strip()
         last_name = request.POST.get("last_name", "").strip()
-        role_name = request.POST.get("role_name")
+        role_name = request.POST.get("role_name", "").strip()
 
         try:
             UserService.update_system_user(

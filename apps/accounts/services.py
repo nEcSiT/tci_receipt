@@ -2,14 +2,19 @@ import datetime
 import hashlib
 import secrets
 import uuid
+import logging
 from django.conf import settings
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.core.cache import cache
+from django.core.mail import send_mail
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.accounts.models import User, Role, Permission, UserRole, RolePermission, PasswordResetToken, AdminRecoverySession
 from apps.audit.models import AuditResult
 from apps.audit.services import AuditService
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -26,6 +31,19 @@ class AuthService:
         email = email.strip()
         user_candidate = User.objects.filter(email__iexact=email).first()
 
+        client_ip = request.META.get("REMOTE_ADDR", "unknown")
+        attempt_key = f"tci-login-fail:{client_ip}:{email.lower()}"
+        failure_count = cache.get(attempt_key, 0)
+        if failure_count >= 5:
+            AuditService.log(
+                action="AUTH_LOGIN_THROTTLED",
+                entity_type="User",
+                entity_id=user_candidate.id if user_candidate else uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                reason="Too many failed login attempts",
+                result=AuditResult.FAILURE,
+            )
+            return None, "Too many failed login attempts. Please try again later."
+
         user = authenticate(request, email=email, password=password)
 
         if user is None:
@@ -38,10 +56,12 @@ class AuthService:
                     reason="Inactive user denied authentication",
                     result=AuditResult.FAILURE,
                 )
+                cache.set(attempt_key, failure_count + 1, timeout=900)
                 return None, "This account is inactive. Please contact the System Administrator."
 
             # Bad credentials: emit failure audit log without disclosing account existence
             entity_id = user_candidate.id if user_candidate else uuid.UUID("00000000-0000-0000-0000-000000000000")
+            cache.set(attempt_key, failure_count + 1, timeout=900)
             AuditService.log(
                 action="AUTH_LOGIN_FAILED",
                 entity_type="User",
@@ -62,6 +82,7 @@ class AuthService:
             return None, "This account is inactive. Please contact the System Administrator."
 
         # Successful login
+        cache.delete(attempt_key)
         auth_login(request, user)
         user.last_login_at = timezone.now()
         user.save(update_fields=["last_login_at"])
@@ -92,7 +113,7 @@ class AuthService:
         auth_logout(request)
 
     @classmethod
-    def request_password_reset(cls, email: str) -> tuple[bool, str | None]:
+    def request_password_reset(cls, email: str, reset_url_base: str | None = None) -> tuple[bool, str | None]:
         """
         Generates a secure, single-use, expiring token.
         Always returns True to prevent user enumeration.
@@ -112,6 +133,27 @@ class AuthService:
             token_hash=token_hash,
             expires_at=expires_at,
         )
+
+        if reset_url_base:
+            reset_url = f"{reset_url_base}{raw_token}/"
+            try:
+                send_mail(
+                    subject="TCI HLC — Password Reset",
+                    message=(
+                        "A password reset was requested for your TCI Higher Life Center account.\n\n"
+                        f"Use this link within 1 hour:\n{reset_url}"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except Exception:
+                AuditService.log(
+                    action="AUTH_PASSWORD_RESET_EMAIL_FAILED",
+                    entity_type="User",
+                    entity_id=user.id,
+                    result=AuditResult.FAILURE,
+                )
 
         AuditService.log(
             action="AUTH_PASSWORD_RESET_REQUESTED",
@@ -187,6 +229,25 @@ class AdminRecoveryService:
             phone_otp_hash=phone_otp_hash,
             expires_at=expires_at,
         )
+
+        try:
+            send_mail(
+                subject="TCI HLC — Administrator Recovery OTP",
+                message=f"Your administrator recovery Email OTP is {email_otp}. It expires in 15 minutes.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[admin_user.email],
+                fail_silently=False,
+            )
+        except Exception:
+            AuditService.log(
+                action="ADMIN_RECOVERY_EMAIL_FAILED",
+                entity_type="AdminRecoverySession",
+                entity_id=session.id,
+                result=AuditResult.FAILURE,
+            )
+
+        if settings.DEBUG:
+            logger.warning("LOCAL DEVELOPMENT ONLY — administrator Phone OTP: %s", phone_otp)
 
         AuditService.log(
             action="ADMIN_RECOVERY_INITIATED",
@@ -289,6 +350,74 @@ class AdminRecoveryService:
         return True, None
 
 
+class RoleService:
+    """Service for System Administrator-managed custom roles."""
+
+    PROTECTED_ROLE_NAMES = {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}
+
+    @classmethod
+    def create_role(cls, actor: User, name: str, description: str = "") -> Role:
+        if not actor.is_active or not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator may create roles.")
+
+        name = " ".join(name.split())
+        if not name:
+            raise ValidationError("Role name is required.")
+        if name.casefold() in {value.casefold() for value in cls.PROTECTED_ROLE_NAMES}:
+            raise ValidationError("This role name is reserved and cannot be created.")
+        if Role.objects.filter(name__iexact=name).exists():
+            raise ValidationError("A role with this name already exists.")
+
+        role = Role.objects.create(name=name, description=description.strip() or None, is_active=True)
+        AuditService.log(
+            action="ROLE_CREATED",
+            entity_type="Role",
+            entity_id=role.id,
+            user=actor,
+            new_values={"name": role.name, "description": role.description},
+            result=AuditResult.SUCCESS,
+        )
+        return role
+
+
+class RolePermissionService:
+    """Service for configuring permissions on System Administrator-created roles."""
+
+    @classmethod
+    def update_role_permissions(cls, actor: User, role: Role, permission_codes: list[str]) -> Role:
+        if not actor.is_active or not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator may configure role permissions.")
+
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise ValidationError("Protected system roles cannot be configured as user roles.")
+
+        requested = set(permission_codes)
+        valid_codes = set(Permission.objects.values_list("code", flat=True))
+        unknown = requested - valid_codes
+        if unknown:
+            raise ValidationError("One or more selected permissions are invalid.")
+
+        old_codes = set(role.role_permissions.values_list("permission__code", flat=True))
+
+        RolePermission.objects.filter(role=role).delete()
+        permissions = Permission.objects.filter(code__in=requested)
+        RolePermission.objects.bulk_create([
+            RolePermission(role=role, permission=permission, assigned_by=actor)
+            for permission in permissions
+        ])
+
+        AuditService.log(
+            action="ROLE_PERMISSIONS_UPDATED",
+            entity_type="Role",
+            entity_id=role.id,
+            user=actor,
+            old_values={"permission_codes": sorted(old_codes)},
+            new_values={"permission_codes": sorted(requested)},
+            result=AuditResult.SUCCESS,
+        )
+        return role
+
+
 class UserService:
     """Service handling System User creation, role assignment, and lifecycle management."""
 
@@ -299,17 +428,21 @@ class UserService:
         email: str,
         first_name: str,
         last_name: str,
-        role_name: str = Role.SYSTEM_USER,
+        role_name: str,
         initial_password: str | None = None,
         permission_codes: list[str] | None = None,
     ) -> User:
-        """Creates a new System User with assigned role and permissions."""
-        email = email.strip()
-        role = Role.objects.get(name=role_name)
+        role = Role.objects.filter(name=role_name, is_active=True).first()
+        if not role:
+            raise ValidationError("A valid active role created by the System Administrator is required.")
 
-        if role.name == Role.SYSTEM_ADMINISTRATOR:
-            if UserRole.objects.filter(role__name=Role.SYSTEM_ADMINISTRATOR).exists():
-                raise ValidationError("Exactly one System Administrator may exist in the system.")
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise ValidationError("A System User cannot be assigned a protected system role.")
+
+        if not creator.is_active or (not creator.is_system_administrator and not creator.has_permission("user.manage")):
+            raise ValidationError("You do not have permission to manage system users.")
+
+        email = email.strip()
 
         password = initial_password or secrets.token_urlsafe(16)
         user = User.objects.create_user(
@@ -346,31 +479,39 @@ class UserService:
         last_name: str,
         role_name: str | None = None,
     ) -> User:
-        """Updates user details and role."""
+        """Updates a System User's details and custom role."""
+        if not actor.is_active or (not actor.is_system_administrator and not actor.has_permission("user.manage")):
+            raise ValidationError("You do not have permission to manage system users.")
+
+        if user.is_system_administrator:
+            raise ValidationError("The protected System Administrator account cannot be edited as a System User.")
+
+        new_role = None
+        if role_name:
+            new_role = Role.objects.filter(name=role_name, is_active=True).first()
+            if not new_role:
+                raise ValidationError("A valid active role created by the System Administrator is required.")
+            if new_role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+                raise ValidationError("Protected system roles cannot be assigned to System Users.")
+
+        old_user_role = user.user_roles.first()
         old_values = {
             "first_name": user.first_name,
             "last_name": user.last_name,
+            "role": old_user_role.role.name if old_user_role else None,
         }
 
         user.first_name = first_name.strip()
         user.last_name = last_name.strip()
         user.save(update_fields=["first_name", "last_name", "updated_at"])
 
-        if role_name:
-            new_role = Role.objects.get(name=role_name)
-            current_user_role = user.user_roles.first()
-            if current_user_role and current_user_role.role != new_role:
-                if new_role.name == Role.SYSTEM_ADMINISTRATOR:
-                    if UserRole.objects.filter(role__name=Role.SYSTEM_ADMINISTRATOR).exclude(user=user).exists():
-                        raise ValidationError("Exactly one System Administrator may exist in the system.")
-                
-                # Protect removing the only System Administrator
-                if current_user_role.role.name == Role.SYSTEM_ADMINISTRATOR and new_role.name != Role.SYSTEM_ADMINISTRATOR:
-                    raise ValidationError("Cannot reassign the single System Administrator role.")
-
-                current_user_role.role = new_role
-                current_user_role.assigned_by = actor
-                current_user_role.save(update_fields=["role", "assigned_by"])
+        if new_role:
+            if old_user_role and old_user_role.role != new_role:
+                old_user_role.role = new_role
+                old_user_role.assigned_by = actor
+                old_user_role.save(update_fields=["role", "assigned_by"])
+            elif not old_user_role:
+                UserRole.objects.create(user=user, role=new_role, assigned_by=actor)
 
         AuditService.log(
             action="USER_UPDATED",
@@ -378,7 +519,11 @@ class UserService:
             entity_id=user.id,
             user=actor,
             old_values=old_values,
-            new_values={"first_name": user.first_name, "last_name": user.last_name},
+            new_values={
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "role": new_role.name if new_role else old_values["role"],
+            },
             result=AuditResult.SUCCESS,
         )
         return user

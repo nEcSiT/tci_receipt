@@ -14,10 +14,10 @@ env = environ.Env(
     REDIS_URL=(str, "redis://localhost:6379/0"),
     CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
     CELERY_RESULT_BACKEND=(str, "redis://localhost:6379/0"),
-    SYSTEM_ADMIN_EMAIL=(str, "admin@tcihlc.org"),
-    SYSTEM_ADMIN_INITIAL_PASSWORD=(str, "ChangeMeOnFirstLogin123!"),
-    SYSTEM_ADMIN_RECOVERY_EMAIL=(str, "admin.recovery@tcihlc.org"),
-    SYSTEM_ADMIN_RECOVERY_PHONE=(str, "+233200000001"),
+    SYSTEM_ADMIN_EMAIL=(str, ""),
+    SYSTEM_ADMIN_INITIAL_PASSWORD=(str, ""),
+    SYSTEM_ADMIN_RECOVERY_EMAIL=(str, ""),
+    SYSTEM_ADMIN_RECOVERY_PHONE=(str, ""),
     STORAGE_BACKEND=(str, "local"),
     STORAGE_DIR=(str, str(BASE_DIR / "media")),
 )
@@ -31,7 +31,6 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -113,6 +112,14 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = Path(env("STORAGE_DIR"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Shared cache for login throttling and other short-lived application state.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("REDIS_URL"),
+    }
+}
 
 # Session Security
 SESSION_COOKIE_AGE = env.int("SESSION_COOKIE_AGE", default=1800)  # 30 minutes

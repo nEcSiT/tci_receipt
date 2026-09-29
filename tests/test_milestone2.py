@@ -1,12 +1,13 @@
 import datetime
 import pytest
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User, Role, UserRole, Permission, RolePermission, PasswordResetToken, AdminRecoverySession
-from apps.accounts.services import AuthService, AdminRecoveryService, UserService
+from apps.accounts.services import AuthService, AdminRecoveryService, UserService, RolePermissionService
 from apps.audit.models import AuditLog
 from apps.audit.services import AuditService
 
@@ -58,7 +59,6 @@ def test_m2_bt_003_system_user_login(client, seed_data, system_user):
     assert response.redirect_chain[-1][0] == reverse("core:dashboard")
     content = response.content.decode()
     assert "Finance" in content
-    assert "System User" in content
     assert AuditLog.objects.filter(action="AUTH_LOGIN_SUCCESS", entity_id=system_user.id).exists()
 
 
@@ -79,21 +79,22 @@ def test_m2_bt_004_inactive_user_login_rejected(client, seed_data, system_user):
 
 
 def test_m2_bt_005_authorized_creation_of_system_user(client, seed_data, system_admin):
-    """M2-BT-005: Authorized creation of System User."""
+    """M2-BT-005: Authorized creation of System User using an admin-created role."""
+    role = Role.objects.create(name="Finance Clerk", description="Test role")
     client.force_login(system_admin)
 
     response = client.post(reverse("accounts:user_create"), {
         "email": "new.clerk@tcihlc.org",
         "first_name": "Daniel",
         "last_name": "Ansah",
-        "role_name": Role.SYSTEM_USER,
+        "role_name": role.name,
         "password": "SecurePassword123!",
     }, follow=True)
 
     assert response.status_code == 200
     new_user = User.objects.get(email="new.clerk@tcihlc.org")
     assert new_user.first_name == "Daniel"
-    assert new_user.user_roles.filter(role__name=Role.SYSTEM_USER).exists()
+    assert new_user.user_roles.filter(role=role).exists()
     assert AuditLog.objects.filter(action="USER_CREATED", entity_id=new_user.id).exists()
 
 
@@ -101,8 +102,8 @@ def test_m2_bt_006_role_and_permission_assignment(seed_data, system_admin, syste
     """M2-BT-006: Role and permission assignment updates user capabilities."""
     assert not system_user.has_permission("audit.view")
 
-    # Assign audit.view to System User role
-    user_role = Role.objects.get(name=Role.SYSTEM_USER)
+    # Assign audit.view to the user's custom role
+    user_role = system_user.user_roles.first().role
     audit_perm = Permission.objects.get(code="audit.view")
     RolePermission.objects.create(role=user_role, permission=audit_perm, assigned_by=system_admin)
 
@@ -244,3 +245,128 @@ def test_m2_bt_012_immutable_audit_logging(seed_data, system_admin):
     # Attempting to delete an audit record raises PermissionDenied
     with pytest.raises(PermissionDenied, match="Audit records are append-only"):
         log_entry.delete()
+
+
+def test_m2_bt_013_system_user_cannot_create_system_administrator(seed_data, system_user):
+    """M2-BT-013: System User cannot create or assign the System Administrator role."""
+    with pytest.raises(ValidationError, match="System Administrator role"):
+        UserService.create_system_user(
+            creator=system_user,
+            email="attempted.admin@tcihlc.org",
+            first_name="Attempted",
+            last_name="Admin",
+            role_name=Role.SYSTEM_ADMINISTRATOR,
+            initial_password="SecurePassword123!",
+        )
+
+
+def test_m2_bt_014_user_management_is_enforced_in_service_layer(seed_data, system_user, system_admin):
+    """M2-BT-014: User management cannot be bypassed by calling services directly."""
+    with pytest.raises(ValidationError, match="permission"):
+        UserService.create_system_user(
+            creator=system_user,
+            email="unauthorized@tcihlc.org",
+            first_name="Unauthorized",
+            last_name="Creator",
+            role_name=system_user.user_roles.first().role.name,
+            initial_password="SecurePassword123!",
+        )
+
+    with pytest.raises(ValidationError, match="permission"):
+        UserService.update_system_user(
+            actor=system_user,
+            user=system_admin,
+            first_name="Changed",
+            last_name="Admin",
+            role_name=system_user.user_roles.first().role.name,
+        )
+
+
+def test_m2_bt_015_system_admin_can_configure_custom_role_permissions(client, seed_data, system_admin, system_user):
+    """M2-BT-015: System Administrator can assign and remove permissions for a custom role."""
+    client.force_login(system_admin)
+    role = system_user.user_roles.first().role
+
+    response = client.post(
+        reverse("accounts:role_permission_update", kwargs={"role_id": role.id}),
+        {"permissions": ["audit.view", "report.view"]},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert system_user.has_permission("audit.view")
+    assert system_user.has_permission("report.view")
+    assert AuditLog.objects.filter(action="ROLE_PERMISSIONS_UPDATED", entity_id=role.id).exists()
+
+
+def test_m2_bt_016_system_user_cannot_configure_roles(client, seed_data, system_user):
+    """M2-BT-016: System User cannot access role management."""
+    client.force_login(system_user)
+    response = client.get(reverse("accounts:role_list"))
+    assert response.status_code == 403
+
+
+def test_m2_bt_017_failed_login_throttling(client, seed_data):
+    """M2-BT-017: Repeated failed login attempts are throttled."""
+    cache.clear()
+    for _ in range(5):
+        response = client.post(reverse("accounts:login"), {
+            "email": "unknown@tcihlc.org",
+            "password": "WrongPassword123!",
+        })
+        assert response.status_code == 401
+
+    response = client.post(reverse("accounts:login"), {
+        "email": "unknown@tcihlc.org",
+        "password": "WrongPassword123!",
+    })
+    assert response.status_code == 401
+    assert "Too many failed login attempts" in response.content.decode()
+    cache.clear()
+
+
+def test_m2_bt_018_external_login_redirect_is_rejected(client, seed_data, system_admin):
+    """M2-BT-018: External post-login redirects are not accepted."""
+    response = client.post(
+        reverse("accounts:login"),
+        {
+            "email": settings.SYSTEM_ADMIN_EMAIL,
+            "password": settings.SYSTEM_ADMIN_INITIAL_PASSWORD,
+            "next": "https://example.com/phishing",
+        },
+    )
+    assert response.status_code == 302
+    assert response.url == reverse("core:dashboard")
+
+
+def test_m2_bt_019_user_creation_exposes_only_custom_roles(client, seed_data, system_admin):
+    """M2-BT-019: Create User must not expose protected system roles."""
+    role = Role.objects.create(name="Finance Officer", description="Handles finance operations")
+    client.force_login(system_admin)
+
+    response = client.get(reverse("accounts:user_create"))
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    assert "Finance Officer" in content
+    assert [r.name for r in response.context["roles"]] == ["Finance Officer"]
+    assert "System Administrator" not in [r.name for r in response.context["roles"]]
+    assert "System User" not in [r.name for r in response.context["roles"]]
+
+
+def test_m2_bt_020_role_page_shows_permissions_for_custom_roles(client, seed_data, system_admin):
+    """M2-BT-020: System Administrator can see and configure permissions under custom roles."""
+    role = Role.objects.create(name="Finance Officer", description="Handles finance operations")
+    permission = Permission.objects.get(code="contribution.create")
+    RolePermission.objects.create(role=role, permission=permission, assigned_by=system_admin)
+
+    client.force_login(system_admin)
+    response = client.get(reverse("accounts:role_list"))
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    assert "Finance Officer" in content
+    assert "Create Contribution" in content
+    assert [r.name for r in response.context["roles"]] == ["Finance Officer"]
+    assert "System Administrator" not in [r.name for r in response.context["roles"]]
+    assert "System User" not in [r.name for r in response.context["roles"]]

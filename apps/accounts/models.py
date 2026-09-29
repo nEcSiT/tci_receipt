@@ -12,6 +12,9 @@ class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("The Email field must be set")
+        if extra_fields.get("is_staff"):
+            raise ValueError("Django staff/admin accounts are disabled. Use the protected System Administrator bootstrap.")
+        extra_fields["is_staff"] = False
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
         if password:
@@ -22,16 +25,11 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
-        """Creates the initial System Administrator."""
-        extra_fields.setdefault("is_staff", True)
-        user = self.create_user(email, password, **extra_fields)
-        # Assign System Administrator role
-        admin_role, _ = Role.objects.get_or_create(
-            name=Role.SYSTEM_ADMINISTRATOR,
-            defaults={"description": "Highest-level application user with system-wide review and administrative access."}
+        """Disabled: the application has one protected System Administrator bootstrap path."""
+        raise ValueError(
+            "Django superuser creation is disabled. "
+            "The single System Administrator can only be provisioned by the protected seed/bootstrap process."
         )
-        UserRole.objects.get_or_create(user=user, role=admin_role)
-        return user
 
 
 class User(AbstractBaseUser, UUIDBaseModel):
@@ -56,6 +54,12 @@ class User(AbstractBaseUser, UUIDBaseModel):
         verbose_name = "User"
         verbose_name_plural = "Users"
         ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        # This application does not use Django staff/admin accounts.
+        # The only privileged application identity is the single System Administrator role.
+        self.is_staff = False
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.email})"

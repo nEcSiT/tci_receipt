@@ -17,6 +17,10 @@ urlpatterns = [
     path("recovery/verify/", views.AdminRecoveryVerifyView.as_view(), name="recovery_verify"),
     path("recovery/reset/", views.AdminRecoveryResetView.as_view(), name="recovery_reset"),
 
+    # Role and permission management
+    path("roles/", views.RoleListView.as_view(), name="role_list"),
+    path("roles/<uuid:role_id>/permissions/", views.RolePermissionUpdateView.as_view(), name="role_permission_update"),
+
     # System User Administration
     path("users/", views.UserListView.as_view(), name="user_list"),
     path("users/create/", views.UserCreateView.as_view(), name="user_create"),

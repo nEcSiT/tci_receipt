@@ -1,10 +1,7 @@
-from django.contrib import admin
 from django.urls import path, include
 from apps.accounts import views as account_views
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
-
     # Direct top-level authentication and recovery routes
     path("login/", account_views.LoginView.as_view(), name="login"),
     path("logout/", account_views.LogoutView.as_view(), name="logout"),
