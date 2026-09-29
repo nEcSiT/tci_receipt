@@ -349,8 +349,9 @@ def test_m2_bt_019_user_creation_exposes_only_custom_roles(client, seed_data, sy
     content = response.content.decode()
 
     assert "Finance Officer" in content
-    assert "System Administrator" not in content
-    assert "System User" not in content
+    assert [r.name for r in response.context["roles"]] == ["Finance Officer"]
+    assert "System Administrator" not in [r.name for r in response.context["roles"]]
+    assert "System User" not in [r.name for r in response.context["roles"]]
 
 
 def test_m2_bt_020_role_page_shows_permissions_for_custom_roles(client, seed_data, system_admin):
@@ -366,5 +367,6 @@ def test_m2_bt_020_role_page_shows_permissions_for_custom_roles(client, seed_dat
 
     assert "Finance Officer" in content
     assert "Create Contribution" in content
-    assert "System Administrator" not in content
-    assert "System User" not in content
+    assert [r.name for r in response.context["roles"]] == ["Finance Officer"]
+    assert "System Administrator" not in [r.name for r in response.context["roles"]]
+    assert "System User" not in [r.name for r in response.context["roles"]]
