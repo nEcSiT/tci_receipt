@@ -13,7 +13,7 @@
       {% if is_create %}Add New System User{% else %}Edit {{ target_user.full_name }}{% endif %}
     </h1>
     <p style="font-size: 14px; color: var(--text-secondary);">
-      {% if is_create %}Create internal church administrative staff account with role assignments.{% else %}Update user profile details and role.{% endif %}
+      {% if is_create %}Create an internal System User and assign one of the roles configured by the System Administrator.{% else %}Update the System User profile and assigned role.{% endif %}
     </p>
   </div>
 
@@ -48,7 +48,7 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="id_role">Assigned Role *</label>
+        <label class="form-label" for="id_role">Role *</label>
         <select id="id_role" name="role_name" class="form-control">
           {% for r in roles %}
           <option value="{{ r.name }}" {% if target_user and target_user.user_roles.first.role == r %}selected{% elif form_data and form_data.role_name == r.name %}selected{% endif %}>
@@ -56,10 +56,15 @@
           </option>
           {% endfor %}
         </select>
-        <div class="form-helper">Note: Exactly one System Administrator may exist across the system.</div>
+        <div class="form-helper">A role is a set of permissions configured by the System Administrator. The selected role determines what this System User can access.</div>
       </div>
 
       {% if is_create %}
+      {% if not roles %}
+      <div class="alert alert-info" style="margin-bottom: 20px;">
+        No custom roles have been created yet. Create a role and assign its permissions before adding a System User.
+      </div>
+      {% endif %}
       <div class="form-group">
         <label class="form-label" for="id_password">Initial Password (Optional)</label>
         <input type="password" id="id_password" name="password" class="form-control" placeholder="Leave blank to generate secure temporary password">
@@ -71,7 +76,7 @@
         <a href="{% url 'accounts:user_list' %}" class="btn btn-outline">
           Cancel
         </a>
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="btn btn-primary" {% if not roles %}disabled{% endif %}>
           {% if is_create %}Create System User{% else %}Save Changes{% endif %}
         </button>
       </div>
