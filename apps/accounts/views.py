@@ -11,7 +11,7 @@ from django.views.generic import ListView, DetailView
 
 from apps.accounts.decorators import permission_required, system_admin_required
 from apps.accounts.models import User, Role, Permission, UserRole, RolePermission, PasswordResetToken, AdminRecoverySession
-from apps.accounts.services import AuthService, AdminRecoveryService, UserService, RolePermissionService
+from apps.accounts.services import AuthService, AdminRecoveryService, UserService, RoleService, RolePermissionService
 from apps.audit.models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -226,7 +226,7 @@ class RoleListView(View):
         if not request.user.is_system_administrator:
             raise PermissionDenied("Only the System Administrator may manage role permissions.")
 
-        roles = list(Role.objects.filter(is_active=True).prefetch_related("role_permissions__permission"))
+        roles = list(Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER]).prefetch_related("role_permissions__permission"))
         permissions = Permission.objects.all().order_by("code")
         for role in roles:
             role.assigned_permission_codes = {rp.permission.code for rp in role.role_permissions.all()}
@@ -234,6 +234,23 @@ class RoleListView(View):
             "roles": roles,
             "permissions": permissions,
         })
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator may manage roles.")
+
+        try:
+            role = RoleService.create_role(
+                actor=request.user,
+                name=request.POST.get("name", ""),
+                description=request.POST.get("description", ""),
+            )
+            messages.success(request, f"Role '{role.name}' was created successfully. You can now assign its permissions.")
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+        return redirect("accounts:role_list")
 
 
 class RolePermissionUpdateView(View):
@@ -246,6 +263,8 @@ class RolePermissionUpdateView(View):
             raise PermissionDenied("Only the System Administrator may manage role permissions.")
 
         role = get_object_or_404(Role, id=role_id)
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise PermissionDenied("Protected system roles cannot be configured here.")
         permission_codes = request.POST.getlist("permissions")
 
         try:
@@ -290,7 +309,7 @@ class UserListView(View):
         if role_filter != "all":
             users = users.filter(user_roles__role__name=role_filter)
 
-        roles = Role.objects.filter(is_active=True)
+        roles = Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER])
 
         return render(request, "accounts/user_list.html", {
             "users": users,
@@ -325,7 +344,7 @@ class UserCreateView(View):
         email = request.POST.get("email", "").strip()
         first_name = request.POST.get("first_name", "").strip()
         last_name = request.POST.get("last_name", "").strip()
-        role_name = request.POST.get("role_name", Role.SYSTEM_USER)
+        role_name = request.POST.get("role_name", "").strip()
         initial_password = request.POST.get("password", "").strip() or None
 
         try:
@@ -393,7 +412,7 @@ class UserEditView(View):
         user = get_object_or_404(User, id=user_id)
         first_name = request.POST.get("first_name", "").strip()
         last_name = request.POST.get("last_name", "").strip()
-        role_name = request.POST.get("role_name")
+        role_name = request.POST.get("role_name", "").strip()
 
         try:
             UserService.update_system_user(
