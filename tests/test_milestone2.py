@@ -59,7 +59,6 @@ def test_m2_bt_003_system_user_login(client, seed_data, system_user):
     assert response.redirect_chain[-1][0] == reverse("core:dashboard")
     content = response.content.decode()
     assert "Finance" in content
-    assert "System User" in content
     assert AuditLog.objects.filter(action="AUTH_LOGIN_SUCCESS", entity_id=system_user.id).exists()
 
 
@@ -80,21 +79,22 @@ def test_m2_bt_004_inactive_user_login_rejected(client, seed_data, system_user):
 
 
 def test_m2_bt_005_authorized_creation_of_system_user(client, seed_data, system_admin):
-    """M2-BT-005: Authorized creation of System User."""
+    """M2-BT-005: Authorized creation of System User using an admin-created role."""
+    role = Role.objects.create(name="Finance Clerk", description="Test role")
     client.force_login(system_admin)
 
     response = client.post(reverse("accounts:user_create"), {
         "email": "new.clerk@tcihlc.org",
         "first_name": "Daniel",
         "last_name": "Ansah",
-        "role_name": Role.SYSTEM_USER,
+        "role_name": role.name,
         "password": "SecurePassword123!",
     }, follow=True)
 
     assert response.status_code == 200
     new_user = User.objects.get(email="new.clerk@tcihlc.org")
     assert new_user.first_name == "Daniel"
-    assert new_user.user_roles.filter(role__name=Role.SYSTEM_USER).exists()
+    assert new_user.user_roles.filter(role=role).exists()
     assert AuditLog.objects.filter(action="USER_CREATED", entity_id=new_user.id).exists()
 
 
@@ -102,8 +102,8 @@ def test_m2_bt_006_role_and_permission_assignment(seed_data, system_admin, syste
     """M2-BT-006: Role and permission assignment updates user capabilities."""
     assert not system_user.has_permission("audit.view")
 
-    # Assign audit.view to System User role
-    user_role = Role.objects.get(name=Role.SYSTEM_USER)
+    # Assign audit.view to the user's custom role
+    user_role = system_user.user_roles.first().role
     audit_perm = Permission.objects.get(code="audit.view")
     RolePermission.objects.create(role=user_role, permission=audit_perm, assigned_by=system_admin)
 
@@ -268,7 +268,7 @@ def test_m2_bt_014_user_management_is_enforced_in_service_layer(seed_data, syste
             email="unauthorized@tcihlc.org",
             first_name="Unauthorized",
             last_name="Creator",
-            role_name=Role.SYSTEM_USER,
+            role_name=system_user.user_roles.first().role.name,
             initial_password="SecurePassword123!",
         )
 
@@ -285,7 +285,7 @@ def test_m2_bt_014_user_management_is_enforced_in_service_layer(seed_data, syste
 def test_m2_bt_015_system_admin_can_configure_system_user_permissions(client, seed_data, system_admin, system_user):
     """M2-BT-015: System Administrator can assign and remove System User role permissions."""
     client.force_login(system_admin)
-    role = Role.objects.get(name=Role.SYSTEM_USER)
+    role = system_user.user_roles.first().role
 
     response = client.post(
         reverse("accounts:role_permission_update", kwargs={"role_id": role.id}),
