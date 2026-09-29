@@ -5,6 +5,7 @@ import uuid
 import logging
 from django.conf import settings
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -30,6 +31,19 @@ class AuthService:
         email = email.strip()
         user_candidate = User.objects.filter(email__iexact=email).first()
 
+        client_ip = request.META.get("REMOTE_ADDR", "unknown")
+        attempt_key = f"tci-login-fail:{client_ip}:{email.lower()}"
+        failure_count = cache.get(attempt_key, 0)
+        if failure_count >= 5:
+            AuditService.log(
+                action="AUTH_LOGIN_THROTTLED",
+                entity_type="User",
+                entity_id=user_candidate.id if user_candidate else uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                reason="Too many failed login attempts",
+                result=AuditResult.FAILURE,
+            )
+            return None, "Too many failed login attempts. Please try again later."
+
         user = authenticate(request, email=email, password=password)
 
         if user is None:
@@ -42,10 +56,12 @@ class AuthService:
                     reason="Inactive user denied authentication",
                     result=AuditResult.FAILURE,
                 )
+                cache.set(attempt_key, failure_count + 1, timeout=900)
                 return None, "This account is inactive. Please contact the System Administrator."
 
             # Bad credentials: emit failure audit log without disclosing account existence
             entity_id = user_candidate.id if user_candidate else uuid.UUID("00000000-0000-0000-0000-000000000000")
+            cache.set(attempt_key, failure_count + 1, timeout=900)
             AuditService.log(
                 action="AUTH_LOGIN_FAILED",
                 entity_type="User",
@@ -66,6 +82,7 @@ class AuthService:
             return None, "This account is inactive. Please contact the System Administrator."
 
         # Successful login
+        cache.delete(attempt_key)
         auth_login(request, user)
         user.last_login_at = timezone.now()
         user.save(update_fields=["last_login_at"])
