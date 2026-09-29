@@ -75,13 +75,17 @@
           <div style="font-size: 13px; color: var(--text-muted);">{{ u.email }}</div>
         </td>
         <td>
-          {% for ur in u.user_roles.all %}
-            <span class="badge {% if ur.role.name == 'System Administrator' %}badge-warning{% else %}badge-neutral{% endif %}">
-              {{ ur.role.name }}
-            </span>
-          {% empty %}
-            <span class="badge badge-neutral">No role</span>
-          {% endfor %}
+          {% if u.is_system_administrator %}
+            <span class="badge badge-warning">System Administrator</span>
+          {% else %}
+            {% for ur in u.user_roles.all %}
+              {% if ur.role.is_active and ur.role.name != 'System Administrator' and ur.role.name != 'System User' %}
+                <span class="badge badge-neutral">{{ ur.role.name }}</span>
+              {% endif %}
+            {% empty %}
+              <span class="badge badge-neutral">No custom role</span>
+            {% endfor %}
+          {% endif %}
         </td>
         <td>
           {% if u.is_active %}
