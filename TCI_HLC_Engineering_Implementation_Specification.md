@@ -1308,8 +1308,10 @@ The milestone is complete when:
 - `M2-BT-014`: User management authorization is enforced at the service layer.
 - `M2-BT-015`: System Administrator can assign/remove permissions for the System User role.
 - `M2-BT-016`: System User cannot access role permission management.
+- `M2-BT-017`: Repeated failed login attempts are throttled.
+- `M2-BT-018`: External post-login redirects are rejected.
 - All Milestone 1 tests continue passing.
-- Current M2 regression target: 42 automated tests.
+- Current M2 regression target: 44 automated tests.
 
 ---
 
