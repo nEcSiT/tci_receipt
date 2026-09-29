@@ -350,16 +350,46 @@ class AdminRecoveryService:
         return True, None
 
 
+class RoleService:
+    """Service for System Administrator-managed custom roles."""
+
+    PROTECTED_ROLE_NAMES = {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}
+
+    @classmethod
+    def create_role(cls, actor: User, name: str, description: str = "") -> Role:
+        if not actor.is_active or not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator may create roles.")
+
+        name = " ".join(name.split())
+        if not name:
+            raise ValidationError("Role name is required.")
+        if name.casefold() in {value.casefold() for value in cls.PROTECTED_ROLE_NAMES}:
+            raise ValidationError("This role name is reserved and cannot be created.")
+        if Role.objects.filter(name__iexact=name).exists():
+            raise ValidationError("A role with this name already exists.")
+
+        role = Role.objects.create(name=name, description=description.strip() or None, is_active=True)
+        AuditService.log(
+            action="ROLE_CREATED",
+            entity_type="Role",
+            entity_id=role.id,
+            user=actor,
+            new_values={"name": role.name, "description": role.description},
+            result=AuditResult.SUCCESS,
+        )
+        return role
+
+
 class RolePermissionService:
-    """Service for configuring permissions on non-administrator roles."""
+    """Service for configuring permissions on System Administrator-created roles."""
 
     @classmethod
     def update_role_permissions(cls, actor: User, role: Role, permission_codes: list[str]) -> Role:
         if not actor.is_active or not actor.is_system_administrator:
             raise ValidationError("Only the System Administrator may configure role permissions.")
 
-        if role.name == Role.SYSTEM_ADMINISTRATOR:
-            raise ValidationError("The System Administrator role permissions are protected.")
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise ValidationError("Protected system roles cannot be configured as user roles.")
 
         requested = set(permission_codes)
         valid_codes = set(Permission.objects.values_list("code", flat=True))
@@ -398,15 +428,16 @@ class UserService:
         email: str,
         first_name: str,
         last_name: str,
-        role_name: str = Role.SYSTEM_USER,
+        role_name: str,
         initial_password: str | None = None,
         permission_codes: list[str] | None = None,
     ) -> User:
-        role = Role.objects.get(name=role_name)
+        role = Role.objects.filter(name=role_name, is_active=True).first()
+        if not role:
+            raise ValidationError("A valid active role created by the System Administrator is required.")
 
-        # System Administrator creation is reserved for the protected bootstrap/recovery path.
-        if role.name == Role.SYSTEM_ADMINISTRATOR:
-            raise ValidationError("A System User cannot create or assign the System Administrator role.")
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise ValidationError("A System User cannot be assigned a protected system role.")
 
         if not creator.is_active or (not creator.is_system_administrator and not creator.has_permission("user.manage")):
             raise ValidationError("You do not have permission to manage system users.")
@@ -448,37 +479,39 @@ class UserService:
         last_name: str,
         role_name: str | None = None,
     ) -> User:
-        """Updates user details and role."""
+        """Updates a System User's details and custom role."""
         if not actor.is_active or (not actor.is_system_administrator and not actor.has_permission("user.manage")):
             raise ValidationError("You do not have permission to manage system users.")
 
-        if role_name == Role.SYSTEM_ADMINISTRATOR and not actor.is_system_administrator:
-            raise ValidationError("Only the System Administrator may manage the System Administrator role.")
+        if user.is_system_administrator:
+            raise ValidationError("The protected System Administrator account cannot be edited as a System User.")
 
+        new_role = None
+        if role_name:
+            new_role = Role.objects.filter(name=role_name, is_active=True).first()
+            if not new_role:
+                raise ValidationError("A valid active role created by the System Administrator is required.")
+            if new_role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+                raise ValidationError("Protected system roles cannot be assigned to System Users.")
+
+        old_user_role = user.user_roles.first()
         old_values = {
             "first_name": user.first_name,
             "last_name": user.last_name,
+            "role": old_user_role.role.name if old_user_role else None,
         }
 
         user.first_name = first_name.strip()
         user.last_name = last_name.strip()
         user.save(update_fields=["first_name", "last_name", "updated_at"])
 
-        if role_name:
-            new_role = Role.objects.get(name=role_name)
-            current_user_role = user.user_roles.first()
-            if current_user_role and current_user_role.role != new_role:
-                if new_role.name == Role.SYSTEM_ADMINISTRATOR:
-                    if UserRole.objects.filter(role__name=Role.SYSTEM_ADMINISTRATOR).exclude(user=user).exists():
-                        raise ValidationError("Exactly one System Administrator may exist in the system.")
-                
-                # Protect removing the only System Administrator
-                if current_user_role.role.name == Role.SYSTEM_ADMINISTRATOR and new_role.name != Role.SYSTEM_ADMINISTRATOR:
-                    raise ValidationError("Cannot reassign the single System Administrator role.")
-
-                current_user_role.role = new_role
-                current_user_role.assigned_by = actor
-                current_user_role.save(update_fields=["role", "assigned_by"])
+        if new_role:
+            if old_user_role and old_user_role.role != new_role:
+                old_user_role.role = new_role
+                old_user_role.assigned_by = actor
+                old_user_role.save(update_fields=["role", "assigned_by"])
+            elif not old_user_role:
+                UserRole.objects.create(user=user, role=new_role, assigned_by=actor)
 
         AuditService.log(
             action="USER_UPDATED",
@@ -486,7 +519,11 @@ class UserService:
             entity_id=user.id,
             user=actor,
             old_values=old_values,
-            new_values={"first_name": user.first_name, "last_name": user.last_name},
+            new_values={
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "role": new_role.name if new_role else old_values["role"],
+            },
             result=AuditResult.SUCCESS,
         )
         return user
