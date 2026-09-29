@@ -5,8 +5,31 @@
 <div class="page-header">
   <div>
     <h1>Roles & Permissions</h1>
-    <p class="text-muted">Configure permissions for System User roles.</p>
+    <p class="text-muted">Create roles and define the permissions that each role gives to System Users.</p>
   </div>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-header">
+    <h2 style="margin:0;">Create Role</h2>
+    <p class="text-muted" style="margin:4px 0 0;">Create a role first, then select the permissions that belong to it.</p>
+  </div>
+  <form method="post" action="{% url 'accounts:role_list' %}" style="padding:20px;">
+    {% csrf_token %}
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;">
+      <div class="form-group">
+        <label class="form-label" for="id_role_name">Role Name *</label>
+        <input type="text" id="id_role_name" name="name" class="form-control" placeholder="e.g. Finance Officer" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="id_role_description">Description</label>
+        <input type="text" id="id_role_description" name="description" class="form-control" placeholder="Describe the purpose of this role">
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-primary" type="submit">Create Role</button>
+    </div>
+  </form>
 </div>
 
 {% for role in roles %}
@@ -14,16 +37,13 @@
   <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
     <div>
       <h2 style="margin:0;">{{ role.name }}</h2>
-      <p class="text-muted" style="margin:4px 0 0;">{{ role.description }}</p>
+      <p class="text-muted" style="margin:4px 0 0;">{{ role.description|default:"No description provided." }}</p>
     </div>
-    {% if role.name == "System Administrator" %}
-      <span class="badge badge-warning">Protected</span>
-    {% endif %}
+    <span class="badge badge-neutral">Custom Role</span>
   </div>
 
-  {% if role.name == "System Administrator" %}
-    <div class="alert alert-info">System Administrator permissions are implicit and cannot be modified here.</div>
-  {% else %}
+  <div style="padding:20px;">
+    <p style="margin-top:0;"><strong>Permissions for this role</strong></p>
     <form method="post" action="{% url 'accounts:role_permission_update' role_id=role.id %}">
       {% csrf_token %}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
@@ -31,7 +51,7 @@
         <label class="form-check" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--border-color);border-radius:8px;">
           <input type="checkbox" name="permissions" value="{{ permission.code }}"
             {% if permission.code in role.assigned_permission_codes %}checked{% endif %}>
-          <span><strong>{{ permission.name }}</strong><br><small>{{ permission.code }}</small></span>
+          <span><strong>{{ permission.name }}</strong><br><small>{{ permission.description|default:permission.code }}</small></span>
         </label>
         {% endfor %}
       </div>
@@ -39,7 +59,11 @@
         <button class="btn btn-primary" type="submit">Save Permissions</button>
       </div>
     </form>
-  {% endif %}
+  </div>
+</div>
+{% empty %}
+<div class="card" style="padding:32px;">
+  <p style="margin:0;">No custom roles have been created yet.</p>
 </div>
 {% endfor %}
 {% endblock %}
