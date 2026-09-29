@@ -220,11 +220,16 @@ class RoleListView(View):
         if not request.user.is_system_administrator:
             raise PermissionDenied("Only the System Administrator may manage role permissions.")
 
-        roles = Role.objects.filter(is_active=True).prefetch_related("role_permissions__permission")
+        roles = list(Role.objects.filter(is_active=True).prefetch_related("role_permissions__permission"))
         permissions = Permission.objects.all().order_by("code")
+        role_permission_codes = {
+            role.id: {rp.permission.code for rp in role.role_permissions.all()}
+            for role in roles
+        }
         return render(request, "accounts/role_list.html", {
             "roles": roles,
             "permissions": permissions,
+            "role_permission_codes": role_permission_codes,
         })
 
 
