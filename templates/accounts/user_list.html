@@ -101,9 +101,11 @@
             <a href="{% url 'accounts:user_detail' user_id=u.id %}" class="btn btn-outline btn-sm" style="padding: 4px 10px; height: 32px;">
               View
             </a>
+            {% if not u.is_system_administrator %}
             <a href="{% url 'accounts:user_edit' user_id=u.id %}" class="btn btn-outline btn-sm" style="padding: 4px 10px; height: 32px;">
               Edit
             </a>
+            {% endif %}
             {% if not u.is_system_administrator %}
             <form method="post" action="{% url 'accounts:user_toggle_status' user_id=u.id %}" style="display: inline;">
               {% csrf_token %}
