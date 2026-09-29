@@ -79,6 +79,9 @@ class Command(BaseCommand):
             )
         self.stdout.write(self.style.SUCCESS("✓ Default permissions assigned to System User role"))
 
+        # Legacy compatibility: remove any persisted Django staff/admin flags.
+        User.objects.filter(is_staff=True).update(is_staff=False)
+
         # 3. Seed Contribution Types
         types_data = [
             ("Tithe", "Scriptural tenth contribution of income or earnings"),
