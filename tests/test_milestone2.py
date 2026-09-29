@@ -244,3 +244,38 @@ def test_m2_bt_012_immutable_audit_logging(seed_data, system_admin):
     # Attempting to delete an audit record raises PermissionDenied
     with pytest.raises(PermissionDenied, match="Audit records are append-only"):
         log_entry.delete()
+
+
+def test_m2_bt_013_system_user_cannot_create_system_administrator(seed_data, system_user):
+    """M2-BT-013: System User cannot create or assign the System Administrator role."""
+    with pytest.raises(ValidationError, match="System Administrator role"):
+        UserService.create_system_user(
+            creator=system_user,
+            email="attempted.admin@tcihlc.org",
+            first_name="Attempted",
+            last_name="Admin",
+            role_name=Role.SYSTEM_ADMINISTRATOR,
+            initial_password="SecurePassword123!",
+        )
+
+
+def test_m2_bt_014_user_management_is_enforced_in_service_layer(seed_data, system_user, system_admin):
+    """M2-BT-014: User management cannot be bypassed by calling services directly."""
+    with pytest.raises(ValidationError, match="permission"):
+        UserService.create_system_user(
+            creator=system_user,
+            email="unauthorized@tcihlc.org",
+            first_name="Unauthorized",
+            last_name="Creator",
+            role_name=Role.SYSTEM_USER,
+            initial_password="SecurePassword123!",
+        )
+
+    with pytest.raises(ValidationError, match="permission"):
+        UserService.update_system_user(
+            actor=system_user,
+            user=system_admin,
+            first_name="Changed",
+            last_name="Admin",
+            role_name=Role.SYSTEM_USER,
+        )
