@@ -104,6 +104,9 @@ class Command(BaseCommand):
         existing_admin_assignment = UserRole.objects.filter(role=admin_role).first()
         if existing_admin_assignment:
             admin_user = existing_admin_assignment.user
+            if admin_user.is_staff:
+                admin_user.is_staff = False
+                admin_user.save(update_fields=["is_staff"])
             self.stdout.write(f"Existing System Administrator found: {admin_user.email}")
         else:
             admin_user, created = User.objects.get_or_create(
