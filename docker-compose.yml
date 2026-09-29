@@ -51,10 +51,10 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - STORAGE_BACKEND=local
       - STORAGE_DIR=/app/media
-      - SYSTEM_ADMIN_EMAIL=admin@tcihlc.org
-      - SYSTEM_ADMIN_INITIAL_PASSWORD=ChangeMeOnFirstLogin123!
-      - SYSTEM_ADMIN_RECOVERY_EMAIL=admin.recovery@tcihlc.org
-      - SYSTEM_ADMIN_RECOVERY_PHONE=+233200000001
+      - SYSTEM_ADMIN_EMAIL=${SYSTEM_ADMIN_EMAIL}
+      - SYSTEM_ADMIN_INITIAL_PASSWORD=${SYSTEM_ADMIN_INITIAL_PASSWORD}
+      - SYSTEM_ADMIN_RECOVERY_EMAIL=${SYSTEM_ADMIN_RECOVERY_EMAIL}
+      - SYSTEM_ADMIN_RECOVERY_PHONE=${SYSTEM_ADMIN_RECOVERY_PHONE}
     depends_on:
       postgres:
         condition: service_healthy
