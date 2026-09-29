@@ -18,9 +18,9 @@ Do not silently remove, simplify or reinterpret confirmed business rules.
 
 # 2. APPROVED STACK
 
-- Python 3.13
-- Django 6.1.x
-- PostgreSQL 18.x
+- Python 3.11 (container baseline)
+- Django 5.2.x
+- PostgreSQL 17.x
 - Django ORM
 - Django Templates + HTML/CSS/JavaScript
 - HTMX 2.x
