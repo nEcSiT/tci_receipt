@@ -222,14 +222,11 @@ class RoleListView(View):
 
         roles = list(Role.objects.filter(is_active=True).prefetch_related("role_permissions__permission"))
         permissions = Permission.objects.all().order_by("code")
-        role_permission_codes = {
-            role.id: {rp.permission.code for rp in role.role_permissions.all()}
-            for role in roles
-        }
+        for role in roles:
+            role.assigned_permission_codes = {rp.permission.code for rp in role.role_permissions.all()}
         return render(request, "accounts/role_list.html", {
             "roles": roles,
             "permissions": permissions,
-            "role_permission_codes": role_permission_codes,
         })
 
 
