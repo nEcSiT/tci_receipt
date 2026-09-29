@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Roles & Permissions{% endblock %}
+{% block page_title %}Roles & Permissions{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Roles & Permissions</h1>
+    <p class="text-muted">Configure permissions for System User roles.</p>
+  </div>
+</div>
+
+{% for role in roles %}
+<div class="card" style="margin-bottom: 20px;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <h2 style="margin:0;">{{ role.name }}</h2>
+      <p class="text-muted" style="margin:4px 0 0;">{{ role.description }}</p>
+    </div>
+    {% if role.name == "System Administrator" %}
+      <span class="badge badge-warning">Protected</span>
+    {% endif %}
+  </div>
+
+  {% if role.name == "System Administrator" %}
+    <div class="alert alert-info">System Administrator permissions are implicit and cannot be modified here.</div>
+  {% else %}
+    <form method="post" action="{% url 'accounts:role_permission_update' role_id=role.id %}">
+      {% csrf_token %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
+        {% for permission in permissions %}
+        <label class="form-check" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--border-color);border-radius:8px;">
+          <input type="checkbox" name="permissions" value="{{ permission.code }}"
+            {% if permission in role_permissions %}checked{% endif %}>
+          <span><strong>{{ permission.name }}</strong><br><small>{{ permission.code }}</small></span>
+        </label>
+        {% endfor %}
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary" type="submit">Save Permissions</button>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
