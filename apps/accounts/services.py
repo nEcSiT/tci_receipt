@@ -333,6 +333,44 @@ class AdminRecoveryService:
         return True, None
 
 
+class RolePermissionService:
+    """Service for configuring permissions on non-administrator roles."""
+
+    @classmethod
+    def update_role_permissions(cls, actor: User, role: Role, permission_codes: list[str]) -> Role:
+        if not actor.is_active or not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator may configure role permissions.")
+
+        if role.name == Role.SYSTEM_ADMINISTRATOR:
+            raise ValidationError("The System Administrator role permissions are protected.")
+
+        requested = set(permission_codes)
+        valid_codes = set(Permission.objects.values_list("code", flat=True))
+        unknown = requested - valid_codes
+        if unknown:
+            raise ValidationError("One or more selected permissions are invalid.")
+
+        old_codes = set(role.role_permissions.values_list("permission__code", flat=True))
+
+        RolePermission.objects.filter(role=role).delete()
+        permissions = Permission.objects.filter(code__in=requested)
+        RolePermission.objects.bulk_create([
+            RolePermission(role=role, permission=permission, assigned_by=actor)
+            for permission in permissions
+        ])
+
+        AuditService.log(
+            action="ROLE_PERMISSIONS_UPDATED",
+            entity_type="Role",
+            entity_id=role.id,
+            user=actor,
+            old_values={"permission_codes": sorted(old_codes)},
+            new_values={"permission_codes": sorted(requested)},
+            result=AuditResult.SUCCESS,
+        )
+        return role
+
+
 class UserService:
     """Service handling System User creation, role assignment, and lifecycle management."""
 
