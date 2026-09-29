@@ -18,11 +18,13 @@ class Command(BaseCommand):
             name=Role.SYSTEM_ADMINISTRATOR,
             defaults={"description": "Highest-level application user with system-wide review and administrative access."}
         )
-        user_role, _ = Role.objects.get_or_create(
-            name=Role.SYSTEM_USER,
-            defaults={"description": "Internal church staff user whose access is determined by assigned permissions."}
-        )
-        self.stdout.write(self.style.SUCCESS("✓ Roles seeded"))
+        # System User is an application user type, not a selectable role.
+        # Deactivate the legacy role if it exists from an earlier implementation.
+        legacy_system_user_role = Role.objects.filter(name=Role.SYSTEM_USER).first()
+        if legacy_system_user_role:
+            legacy_system_user_role.is_active = False
+            legacy_system_user_role.save(update_fields=["is_active", "updated_at"])
+        self.stdout.write(self.style.SUCCESS("✓ Protected administrator role seeded; custom user roles remain administrator-managed"))
 
         # 2. Seed Permissions
         permissions_data = [
@@ -56,28 +58,8 @@ class Command(BaseCommand):
             created_perms[code] = perm
         self.stdout.write(self.style.SUCCESS("✓ Permissions seeded"))
 
-        # Assign standard default permissions to System User
-        default_user_perm_codes = [
-            "contribution.create",
-            "contribution.edit_own",
-            "contribution.delete_own",
-            "receipt.view_own",
-            "receipt.edit_own",
-            "receipt.delete_own",
-            "member.create",
-            "member.edit",
-            "member.merge.request",
-            "requisition.view",
-            "requisition.review",
-            "evidence.verify",
-            "report.view",
-        ]
-        for p_code in default_user_perm_codes:
-            RolePermission.objects.get_or_create(
-                role=user_role,
-                permission=created_perms[p_code]
-            )
-        self.stdout.write(self.style.SUCCESS("✓ Default permissions assigned to System User role"))
+        # System User permissions are intentionally not seeded here.
+        # The System Administrator creates custom roles and selects the permissions for each role.
 
         # Legacy compatibility: remove any persisted Django staff/admin flags.
         User.objects.filter(is_staff=True).update(is_staff=False)
