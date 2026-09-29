@@ -4,6 +4,7 @@ import secrets
 import uuid
 from django.conf import settings
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.core.mail import send_mail
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -92,7 +93,7 @@ class AuthService:
         auth_logout(request)
 
     @classmethod
-    def request_password_reset(cls, email: str) -> tuple[bool, str | None]:
+    def request_password_reset(cls, email: str, reset_url: str | None = None) -> tuple[bool, str | None]:
         """
         Generates a secure, single-use, expiring token.
         Always returns True to prevent user enumeration.
@@ -112,6 +113,26 @@ class AuthService:
             token_hash=token_hash,
             expires_at=expires_at,
         )
+
+        if reset_url:
+            try:
+                send_mail(
+                    subject="TCI HLC — Password Reset",
+                    message=(
+                        "A password reset was requested for your TCI Higher Life Center account.\n\n"
+                        f"Use this link within 1 hour:\n{reset_url}"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except Exception:
+                AuditService.log(
+                    action="AUTH_PASSWORD_RESET_EMAIL_FAILED",
+                    entity_type="User",
+                    entity_id=user.id,
+                    result=AuditResult.FAILURE,
+                )
 
         AuditService.log(
             action="AUTH_PASSWORD_RESET_REQUESTED",
