@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User, Role, UserRole, Permission, RolePermission, PasswordResetToken, AdminRecoverySession
-from apps.accounts.services import AuthService, AdminRecoveryService, UserService
+from apps.accounts.services import AuthService, AdminRecoveryService, UserService, RolePermissionService
 from apps.audit.models import AuditLog
 from apps.audit.services import AuditService
 
@@ -279,3 +279,27 @@ def test_m2_bt_014_user_management_is_enforced_in_service_layer(seed_data, syste
             last_name="Admin",
             role_name=Role.SYSTEM_USER,
         )
+
+
+def test_m2_bt_015_system_admin_can_configure_system_user_permissions(client, seed_data, system_admin, system_user):
+    """M2-BT-015: System Administrator can assign and remove System User role permissions."""
+    client.force_login(system_admin)
+    role = Role.objects.get(name=Role.SYSTEM_USER)
+
+    response = client.post(
+        reverse("accounts:role_permission_update", kwargs={"role_id": role.id}),
+        {"permissions": ["audit.view", "report.view"]},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert system_user.has_permission("audit.view")
+    assert system_user.has_permission("report.view")
+    assert AuditLog.objects.filter(action="ROLE_PERMISSIONS_UPDATED", entity_id=role.id).exists()
+
+
+def test_m2_bt_016_system_user_cannot_configure_roles(client, seed_data, system_user):
+    """M2-BT-016: System User cannot access role permission management."""
+    client.force_login(system_user)
+    response = client.get(reverse("accounts:role_list"))
+    assert response.status_code == 403
