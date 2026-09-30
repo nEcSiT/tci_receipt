@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}{{ member.full_name }} ({{ member.member_number }}) — TCI Higher Life Center{% endblock %}
+{% block page_title %}Member Profile{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<strong>{{ member.full_name }}</strong>
+{% endblock %}
+
+{% block content %}
+<!-- Profile Header -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+      <h1 style="font-size: 26px; font-weight: 700; color: var(--navy-dark); margin: 0;">{{ member.full_name }}</h1>
+      {% if member.status == 'ACTIVE' %}
+        <span class="badge badge-success">Active</span>
+      {% elif member.status == 'INACTIVE' %}
+        <span class="badge badge-warning">Inactive</span>
+      {% else %}
+        <span class="badge badge-danger">Deactivated</span>
+      {% endif %}
+    </div>
+    <div style="font-size: 14px; color: var(--text-secondary); display: flex; gap: 16px; flex-wrap: wrap;">
+      <span>Member ID: <code><strong>{{ member.member_number }}</strong></code></span>
+      <span>Registered: {{ member.created_at|date:"M d, Y" }}</span>
+      {% if member.email %}
+      <span>Email: <a href="mailto:{{ member.email }}" style="color: var(--navy-dark);">{{ member.email }}</a></span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    {% if is_system_administrator or user|has_perm:"member.edit" %}
+    <a href="{% url 'members:member_edit' member.id %}" class="btn btn-outline">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit Profile
+    </a>
+    <form method="post" action="{% url 'members:status_toggle' member.id %}" style="display: inline;">
+      {% csrf_token %}
+      {% if member.status == 'ACTIVE' %}
+      <input type="hidden" name="action" value="deactivate">
+      <button type="submit" class="btn btn-outline" style="color: var(--color-orange); border-color: rgba(241, 104, 34, 0.4);" onclick="return confirm('Are you sure you want to deactivate this member? Historical records will be safely preserved.')">
+        Deactivate
+      </button>
+      {% else %}
+      <input type="hidden" name="action" value="activate">
+      <button type="submit" class="btn btn-outline" style="color: var(--color-green); border-color: rgba(78, 203, 77, 0.4);">
+        Activate
+      </button>
+      {% endif %}
+    </form>
+    {% endif %}
+
+    {% if is_system_administrator or user|has_perm:"member.merge.request" %}
+    <a href="{% url 'members:merge_list' %}?source={{ member.id }}" class="btn btn-outline">
+      Merge / Link
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Profile Grid -->
+<div style="display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start;">
+  <!-- Left Column: Details & Ministry -->
+  <div>
+    <!-- Member Details Card -->
+    <div class="card" style="padding: 24px; margin-bottom: 20px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        Profile Information
+      </h3>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; font-size: 14px;">
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Full Name</div>
+          <div style="font-weight: 600; color: var(--navy-dark); margin-top: 2px;">{{ member.full_name }}</div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Member Number</div>
+          <div style="margin-top: 2px;"><code>{{ member.member_number }}</code></div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Email Address</div>
+          <div style="margin-top: 2px;">{{ member.email|default:"Not provided" }}</div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Ministry Assignment</div>
+          <div style="margin-top: 2px;">
+            {% if member.ministry %}
+            <span class="badge" style="background: rgba(1, 19, 69, 0.08); color: var(--navy-dark);">{{ member.ministry }}</span>
+            {% else %}
+            <span style="color: var(--text-muted);">None</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Team</div>
+          <div style="margin-top: 2px;">{{ member.team|default:"None" }}</div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Department</div>
+          <div style="margin-top: 2px;">{{ member.department|default:"None" }}</div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Last Updated</div>
+          <div style="margin-top: 2px; color: var(--text-secondary);">{{ member.updated_at|date:"M d, Y H:i" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Phone Numbers & Contribution History -->
+  <div>
+    <!-- Phone Numbers Card -->
+    <div class="card" style="padding: 24px; margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+            Phone Numbers
+          </h3>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 2px 0 0 0;">
+            Used for automatic Mobile Money contributor identification and SMS notifications.
+          </p>
+        </div>
+      </div>
+
+      <!-- Phone Numbers Table -->
+      <div class="table-responsive" style="margin-bottom: 20px;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Phone Number</th>
+              <th>Network / Provider</th>
+              <th>Status</th>
+              <th>Role</th>
+              {% if is_system_administrator or user|has_perm:"member.edit" %}
+              <th style="text-align: right;">Actions</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in phones %}
+            <tr>
+              <td>
+                <span style="font-family: monospace; font-size: 15px; font-weight: 700; color: var(--navy-dark);">
+                  {{ p.phone_number }}
+                </span>
+              </td>
+              <td>
+                <span style="font-size: 13px; color: var(--text-secondary);">{{ p.provider|default:"Standard" }}</span>
+              </td>
+              <td>
+                {% if p.is_active %}
+                  <span class="badge badge-success">Active</span>
+                {% else %}
+                  <span class="badge badge-warning">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if p.is_primary %}
+                  <span class="badge" style="background: var(--navy-dark); color: #fff; font-weight: 600;">Primary</span>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 12px;">Secondary</span>
+                {% endif %}
+              </td>
+              {% if is_system_administrator or user|has_perm:"member.edit" %}
+              <td style="text-align: right;">
+                <div style="display: inline-flex; gap: 8px;">
+                  {% if not p.is_primary and p.is_active %}
+                  <form method="post" action="{% url 'members:phone_action' member.id p.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="set_primary">
+                    <button type="submit" class="btn btn-outline btn-sm" title="Make primary phone">Set Primary</button>
+                  </form>
+                  {% endif %}
+
+                  <form method="post" action="{% url 'members:phone_action' member.id p.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="toggle_active">
+                    {% if p.is_active %}
+                    <button type="submit" class="btn btn-outline btn-sm" style="color: var(--color-orange);" title="Deactivate phone">Deactivate</button>
+                    {% else %}
+                    <button type="submit" class="btn btn-outline btn-sm" style="color: var(--color-green);" title="Activate phone">Activate</button>
+                    {% endif %}
+                  </form>
+                </div>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                No phone numbers associated with this member yet.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Add Phone Form -->
+      {% if is_system_administrator or user|has_perm:"member.edit" %}
+      <div style="background: var(--bg-surface); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <h4 style="font-size: 14px; font-weight: 700; color: var(--navy-dark); margin: 0 0 10px 0;">Add Additional Phone Number</h4>
+        <form method="post" action="{% url 'members:phone_add' member.id %}" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          {% csrf_token %}
+          <div style="flex: 1; min-width: 180px;">
+            <input type="text" name="phone_number" required placeholder="+233240000000" class="form-control" style="height: 38px;">
+          </div>
+          <div style="width: 160px;">
+            <select name="provider" class="form-control" style="height: 38px;">
+              <option value="">Provider...</option>
+              <option value="MTN">MTN</option>
+              <option value="Telecel">Telecel</option>
+              <option value="AT">AT Money</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" name="is_primary" id="id_is_primary">
+            <label for="id_is_primary" style="font-size: 13px; font-weight: 500; cursor: pointer;">Set as Primary</label>
+          </div>
+          <button type="submit" class="btn btn-secondary btn-sm" style="height: 38px;">Add Phone</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Contribution History Foundation (Section 5 / M4 readiness) -->
+    <div class="card" style="padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+            Contribution History
+          </h3>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 2px 0 0 0;">
+            Historical records preserved across member updates, deactivations, and merges.
+          </p>
+        </div>
+        {% if is_system_administrator or user|has_perm:"contribution.create" %}
+        <a href="{% url 'contributions:contribution_create' %}?member={{ member.id }}" class="btn btn-outline btn-sm">
+          + Record Contribution
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Date</th>
+              <th>Contribution Type</th>
+              <th>Payment Mode</th>
+              <th>Amount (GHS)</th>
+              <th>Status</th>
+              <th style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in contributions %}
+            <tr>
+              <td>
+                <a href="{% url 'contributions:contribution_detail' c.id %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: none;">
+                  <code>{{ c.contribution_number }}</code>
+                </a>
+              </td>
+              <td>{{ c.contribution_date|date:"M d, Y" }}</td>
+              <td>{{ c.contribution_type.name }}</td>
+              <td>{{ c.get_payment_mode_display }}</td>
+              <td style="font-weight: 700; color: var(--navy-dark);">{{ c.amount|floatformat:2 }}</td>
+              <td>
+                {% if c.status == 'CONFIRMED' %}
+                  <span class="badge badge-success">Confirmed</span>
+                {% elif c.status == 'PENDING' %}
+                  <span class="badge badge-warning">Pending</span>
+                {% else %}
+                  <span class="badge badge-danger">{{ c.status }}</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                <a href="{% url 'contributions:contribution_detail' c.id %}" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                  View
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 32px 16px; color: var(--text-muted);">
+                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">No contributions recorded yet</div>
+                <div style="font-size: 13px;">Automatic and manual contributions linked to this member will appear here.</div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

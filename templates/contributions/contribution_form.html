@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Record Contribution — TCI Higher Life Center{% endblock %}
+{% block page_title %}Record Church Contribution{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'contributions:contribution_list' %}">Contributions</a> &rsaquo;
+<strong>Record Manual Contribution</strong>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 840px; margin: 0 auto;">
+  <div class="card" style="padding: 32px;">
+    <div style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+      <h2 style="font-size: 20px; font-weight: 700; color: var(--navy-dark); margin-bottom: 4px;">
+        Record Church Contribution
+      </h2>
+      <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+        Record a verified manual financial contribution. A permanent unique Contribution ID (format <code>CON-XXXXXXXX</code>) will be generated automatically.
+      </p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom: 24px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <form method="post" id="contributionForm">
+      {% csrf_token %}
+
+      <!-- Step 1: Member Selection -->
+      <div style="margin-bottom: 28px;">
+        <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px;">
+          1. Member / Contributor Association <span style="color: var(--color-orange);">*</span>
+        </label>
+
+        <!-- Selected Member Display Card (Visible when member selected) -->
+        <div id="selectedMemberCard" style="{% if not preselected_member and not form_data.member_id %}display: none;{% endif %} background: rgba(1, 19, 69, 0.04); border: 1px solid rgba(1, 19, 69, 0.15); border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 700; color: var(--navy-dark); font-size: 15px;" id="selectedMemberName">
+              {{ preselected_member.full_name }}
+            </div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-top: 2px;">
+              Member ID: <code id="selectedMemberNumber"><strong>{{ preselected_member.member_number }}</strong></code>
+              {% if preselected_member.email %}
+              &bull; <span id="selectedMemberEmail">{{ preselected_member.email }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btnChangeMember" onclick="clearSelectedMember()">
+            Change Member
+          </button>
+        </div>
+
+        <input type="hidden" name="member_id" id="inputMemberId" value="{% if preselected_member %}{{ preselected_member.id }}{% elif form_data.member_id %}{{ form_data.member_id }}{% endif %}">
+
+        <!-- Member Search Box (Visible when selecting) -->
+        <div id="memberSearchContainer" style="{% if preselected_member or form_data.member_id %}display: none;{% endif %}">
+          <div style="position: relative;">
+            <input type="text" id="memberSearchInput" class="form-control" placeholder="Search by name, member number, or phone..." autocomplete="off" style="height: 42px;">
+            <div id="memberSearchResults" style="display: none; position: absolute; top: 46px; left: 0; right: 0; background: white; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); max-height: 240px; overflow-y: auto; z-index: 100;">
+            </div>
+          </div>
+
+          <!-- Quick Select Dropdown Fallback -->
+          <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; color: var(--text-muted);">Or select from recent members:</span>
+            <select id="quickMemberSelect" class="form-control" style="font-size: 13px; height: 34px; padding: 4px 10px;" onchange="onQuickMemberSelect(this)">
+              <option value="">Select active church member...</option>
+              {% for m in recent_members %}
+              <option value="{{ m.id }}" data-number="{{ m.member_number }}" data-name="{{ m.full_name }}" data-email="{{ m.email|default:'' }}">
+                {{ m.full_name }} ({{ m.member_number }})
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Contribution Classification -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+            2. Contribution Type <span style="color: var(--color-orange);">*</span>
+          </label>
+          <select name="contribution_type_id" id="selectContributionType" class="form-control" required style="height: 42px;" onchange="onTypeChanged()">
+            <option value="">Select contribution type...</option>
+            {% for ct in contribution_types %}
+            <option value="{{ ct.id }}" data-name="{{ ct.name }}" {% if form_data.contribution_type_id == ct.id|stringformat:"s" %}selected{% endif %}>
+              {{ ct.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+            3. Payment Mode <span style="color: var(--color-orange);">*</span>
+          </label>
+          <select name="payment_mode" id="selectPaymentMode" class="form-control" required style="height: 42px;" onchange="onModeChanged()">
+            <option value="">Select payment mode...</option>
+            {% for code, label in payment_modes %}
+            <option value="{{ code }}" {% if form_data.payment_mode == code %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            Explicitly supports <strong>Bank Transaction</strong>, Mobile Money, Cash, Cheque, and Other.
+          </div>
+        </div>
+      </div>
+
+      <!-- Other Contribution Description (Shown when "Other" is selected) -->
+      <div id="otherDescriptionContainer" style="display: none; margin-bottom: 24px; background: rgba(241, 104, 34, 0.04); border: 1px dashed rgba(241, 104, 34, 0.4); border-radius: 8px; padding: 16px;">
+        <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+          Other Contribution Description <span style="color: var(--color-orange);">*</span>
+        </label>
+        <textarea name="custom_type_description" id="inputCustomDescription" class="form-control" rows="2" placeholder="Specify ministry or appeal purpose (e.g., Youth Ministry Support, Special Mission Appeal)...">{{ form_data.custom_type_description|default:'' }}</textarea>
+        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+          When "Other" is selected, the purpose must be described and preserved with the financial record.
+        </div>
+      </div>
+
+      <!-- Step 3: Financial Details (Amount, Reference, Date) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+            4. Contribution Amount (GHS) <span style="color: var(--color-orange);">*</span>
+          </label>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 12px; top: 11px; font-weight: 700; color: var(--navy-dark); font-size: 14px;">GHS</span>
+            <input type="number" name="amount" id="inputAmount" step="0.01" min="0.01" required value="{{ form_data.amount|default:'' }}" class="form-control" placeholder="0.00" style="height: 42px; padding-left: 54px; font-size: 16px; font-weight: 600;" oninput="updateSummary()">
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Must be greater than zero. Stored with full monetary precision.</div>
+        </div>
+
+        <div>
+          <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+            5. Contribution Date <span style="color: var(--color-orange);">*</span>
+          </label>
+          <input type="date" name="contribution_date" id="inputContributionDate" required value="{{ form_data.contribution_date|default:today_date }}" class="form-control" style="height: 42px;" onchange="updateSummary()">
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Date when contribution occurred (historical dates preserved).</div>
+        </div>
+      </div>
+
+      <!-- Reference Information -->
+      <div style="margin-bottom: 28px;">
+        <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;" id="referenceLabel">
+          6. Reference Number / Transaction Details
+        </label>
+        <input type="text" name="reference_number" id="inputReference" value="{{ form_data.reference_number|default:'' }}" class="form-control" placeholder="Enter transaction reference or receipt note..." style="height: 42px;" oninput="updateSummary()">
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;" id="referenceHint">
+          Bank Transaction Reference, Mobile Money Reference, or Cheque Number for audit and reconciliation.
+        </div>
+      </div>
+
+      <!-- Review Card -->
+      <div class="card" style="background: var(--bg-surface); padding: 20px; border-radius: 8px; margin-bottom: 28px; border: 1px solid var(--border-color);">
+        <h4 style="font-size: 14px; font-weight: 700; color: var(--navy-dark); margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">
+          Contribution Review
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; font-size: 13px;">
+          <div>
+            <div style="color: var(--text-secondary);">Contributor:</div>
+            <div style="font-weight: 700; color: var(--navy-dark);" id="summaryMember">
+              {{ preselected_member.full_name|default:"Not selected" }}
+            </div>
+          </div>
+          <div>
+            <div style="color: var(--text-secondary);">Contribution Type:</div>
+            <div style="font-weight: 700; color: var(--navy-dark);" id="summaryType">&mdash;</div>
+          </div>
+          <div>
+            <div style="color: var(--text-secondary);">Payment Mode:</div>
+            <div style="font-weight: 700; color: var(--navy-dark);" id="summaryMode">&mdash;</div>
+          </div>
+          <div>
+            <div style="color: var(--text-secondary);">Amount:</div>
+            <div style="font-weight: 700; color: var(--color-green); font-size: 15px;" id="summaryAmount">GHS 0.00</div>
+          </div>
+          <div>
+            <div style="color: var(--text-secondary);">Contribution Date:</div>
+            <div style="font-weight: 700; color: var(--navy-dark);" id="summaryDate">{{ today_date }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 12px;">
+        <a href="{% url 'contributions:contribution_list' %}" class="btn btn-outline" style="padding: 10px 22px;">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary" id="btnSubmitContribution" style="padding: 10px 28px; font-weight: 700;">
+          Save Contribution
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function onTypeChanged() {
+    const select = document.getElementById("selectContributionType");
+    const selectedOption = select.options[select.selectedIndex];
+    const typeName = selectedOption ? selectedOption.getAttribute("data-name") : "";
+    const otherBox = document.getElementById("otherDescriptionContainer");
+    const descInput = document.getElementById("inputCustomDescription");
+
+    if (typeName && typeName.toLowerCase() === "other") {
+      otherBox.style.display = "block";
+      descInput.setAttribute("required", "required");
+    } else {
+      otherBox.style.display = "none";
+      descInput.removeAttribute("required");
+    }
+    updateSummary();
+  }
+
+  function onModeChanged() {
+    const select = document.getElementById("selectPaymentMode");
+    const mode = select.value;
+    const label = document.getElementById("referenceLabel");
+    const hint = document.getElementById("referenceHint");
+    const refInput = document.getElementById("inputReference");
+
+    if (mode === "BANK_TRANSACTION") {
+      label.innerHTML = "6. Bank Transaction Reference <span style='color: var(--color-orange);'>*</span>";
+      hint.textContent = "Enter official bank transfer, counterfoil, or deposit slip reference number.";
+      refInput.placeholder = "e.g. BT-2026-98174 or Slip #4012";
+    } else if (mode === "MOBILE_MONEY") {
+      label.innerHTML = "6. Mobile Money Transaction Reference";
+      hint.textContent = "Enter network transaction ID (MTN MoMo, Telecel Cash, AT Money).";
+      refInput.placeholder = "e.g. 19284719283";
+    } else if (mode === "CHEQUE") {
+      label.innerHTML = "6. Cheque Number <span style='color: var(--color-orange);'>*</span>";
+      hint.textContent = "Enter the 6-digit cheque number and issuing bank.";
+      refInput.placeholder = "e.g. CHQ-004521 (Standard Chartered)";
+    } else {
+      label.textContent = "6. Reference Number / Transaction Details";
+      hint.textContent = "Optional reference, receipt note, or tracking number.";
+      refInput.placeholder = "Enter relevant reference...";
+    }
+    updateSummary();
+  }
+
+  function updateSummary() {
+    // Type
+    const typeSelect = document.getElementById("selectContributionType");
+    const typeText = typeSelect.selectedIndex > 0 ? typeSelect.options[typeSelect.selectedIndex].text : "—";
+    document.getElementById("summaryType").textContent = typeText;
+
+    // Mode
+    const modeSelect = document.getElementById("selectPaymentMode");
+    const modeText = modeSelect.selectedIndex > 0 ? modeSelect.options[modeSelect.selectedIndex].text : "—";
+    document.getElementById("summaryMode").textContent = modeText;
+
+    // Amount
+    const amountVal = parseFloat(document.getElementById("inputAmount").value);
+    if (!isNaN(amountVal) && amountVal > 0) {
+      document.getElementById("summaryAmount").textContent = "GHS " + amountVal.toFixed(2);
+    } else {
+      document.getElementById("summaryAmount").textContent = "GHS 0.00";
+    }
+
+    // Date
+    const dateVal = document.getElementById("inputContributionDate").value;
+    document.getElementById("summaryDate").textContent = dateVal || "—";
+  }
+
+  // Member Quick Select
+  function onQuickMemberSelect(select) {
+    if (!select.value) return;
+    const opt = select.options[select.selectedIndex];
+    selectMember({
+      id: select.value,
+      full_name: opt.getAttribute("data-name"),
+      member_number: opt.getAttribute("data-number"),
+      email: opt.getAttribute("data-email")
+    });
+  }
+
+  function selectMember(m) {
+    document.getElementById("inputMemberId").value = m.id;
+    document.getElementById("selectedMemberName").textContent = m.full_name;
+    document.getElementById("selectedMemberNumber").textContent = m.member_number;
+    if (document.getElementById("selectedMemberEmail")) {
+      document.getElementById("selectedMemberEmail").textContent = m.email || "";
+    }
+    document.getElementById("summaryMember").textContent = m.full_name + " (" + m.member_number + ")";
+    document.getElementById("selectedMemberCard").style.display = "flex";
+    document.getElementById("memberSearchContainer").style.display = "none";
+  }
+
+  function clearSelectedMember() {
+    document.getElementById("inputMemberId").value = "";
+    document.getElementById("selectedMemberCard").style.display = "none";
+    document.getElementById("memberSearchContainer").style.display = "block";
+    document.getElementById("summaryMember").textContent = "Not selected";
+    document.getElementById("memberSearchInput").focus();
+  }
+
+  // Live Member Search via AJAX
+  let searchTimeout = null;
+  const searchInput = document.getElementById("memberSearchInput");
+  const resultsBox = document.getElementById("memberSearchResults");
+
+  if (searchInput) {
+    searchInput.addEventListener("input", function() {
+      clearTimeout(searchTimeout);
+      const q = this.value.trim();
+      if (q.length < 2) {
+        resultsBox.style.display = "none";
+        return;
+      }
+
+      searchTimeout = setTimeout(() => {
+        fetch("/contributions/members/search/?q=" + encodeURIComponent(q))
+          .then(res => res.json())
+          .then(data => {
+            resultsBox.innerHTML = "";
+            if (!data.results || data.results.length === 0) {
+              resultsBox.innerHTML = "<div style='padding: 12px 16px; color: var(--text-muted); font-size: 13px;'>No members found matching '" + q + "'.</div>";
+              resultsBox.style.display = "block";
+              return;
+            }
+
+            data.results.forEach(m => {
+              const div = document.createElement("div");
+              div.style.cssText = "padding: 10px 16px; border-bottom: 1px solid var(--border-color); cursor: pointer; display: flex; justify-content: space-between; align-items: center;";
+              div.onmouseover = () => { div.style.background = "var(--bg-surface)"; };
+              div.onmouseout = () => { div.style.background = "white"; };
+              div.innerHTML = "<div><strong>" + m.full_name + "</strong> <code style='font-size: 12px; margin-left: 6px;'>" + m.member_number + "</code>" +
+                (m.phone ? "<div style='font-size: 11px; color: var(--text-secondary);'>" + m.phone + "</div>" : "") +
+                "</div><button type='button' class='btn btn-outline btn-sm' style='padding: 2px 8px; font-size: 11px;'>Select</button>";
+              div.onclick = () => {
+                selectMember(m);
+                resultsBox.style.display = "none";
+                searchInput.value = "";
+              };
+              resultsBox.appendChild(div);
+            });
+            resultsBox.style.display = "block";
+          })
+          .catch(() => {
+            resultsBox.style.display = "none";
+          });
+      }, 250);
+    });
+
+    document.addEventListener("click", function(e) {
+      if (!searchInput.contains(e.target) && !resultsBox.contains(e.target)) {
+        resultsBox.style.display = "none";
+      }
+    });
+  }
+
+  // Initialize summary on page load
+  document.addEventListener("DOMContentLoaded", () => {
+    onTypeChanged();
+    onModeChanged();
+  });
+</script>
+{% endblock %}

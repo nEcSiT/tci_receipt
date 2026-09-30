@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Contributions — TCI Higher Life Center{% endblock %}
+{% block page_title %}Contribution Management{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo; <strong>Contributions</strong>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 4px; color: var(--navy-dark);">Church Contributions</h1>
+    <p style="font-size: 14px; color: var(--text-secondary);">Accurately record, verify, and inspect tithes, offerings, partnerships, and special funds.</p>
+  </div>
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    {% if is_system_administrator or user|has_perm:"contribution.create" %}
+    <a href="{% url 'contributions:contribution_create' %}" class="btn btn-primary" id="btnRecordContribution">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Record Contribution
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Operational Summary Metric Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
+  <div class="card" style="padding: 16px 20px;">
+    <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Total Contributions</div>
+    <div style="font-size: 28px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">{{ total_count }}</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Lifetime recorded entries</div>
+  </div>
+  <div class="card" style="padding: 16px 20px;">
+    <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Confirmed Revenue</div>
+    <div style="font-size: 28px; font-weight: 700; color: var(--color-green); margin-top: 4px;">GHS {{ total_amount|floatformat:2 }}</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Confirmed financial ledger total</div>
+  </div>
+  <div class="card" style="padding: 16px 20px;">
+    <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Manual Entries</div>
+    <div style="font-size: 28px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">{{ manual_count }}</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Recorded by System Users</div>
+  </div>
+  <div class="card" style="padding: 16px 20px;">
+    <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Automatic Digital</div>
+    <div style="font-size: 28px; font-weight: 700; color: var(--color-blue); margin-top: 4px;">{{ automatic_count }}</div>
+    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Inbound gateway transactions</div>
+  </div>
+</div>
+
+<!-- Search and Multi-Criteria Filter Bar -->
+<div class="card" style="padding: 20px; margin-bottom: 24px;">
+  <form method="get" action="{% url 'contributions:contribution_list' %}" style="display: flex; flex-direction: column; gap: 14px;">
+    <!-- Top Row: Query text search -->
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      <div style="flex: 2; min-width: 260px;">
+        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search by Contribution ID, Contributor, Receipt #, Reference..." style="height: 40px;">
+      </div>
+      <div>
+        <select name="type" class="form-control" style="height: 40px; padding-right: 28px;">
+          <option value="all" {% if type_filter == 'all' %}selected{% endif %}>All Contribution Types</option>
+          {% for ct in contribution_types %}
+          <option value="{{ ct.id }}" {% if type_filter == ct.id|stringformat:"s" %}selected{% endif %}>{{ ct.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <select name="mode" class="form-control" style="height: 40px; padding-right: 28px;">
+          <option value="all" {% if mode_filter == 'all' %}selected{% endif %}>All Payment Modes</option>
+          {% for code, label in payment_modes %}
+          <option value="{{ code }}" {% if mode_filter == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Second Row: Entry Method, Status, Date Range & Buttons -->
+    <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+      <div style="width: 170px;">
+        <select name="entry_method" class="form-control" style="height: 40px; padding-right: 28px;">
+          <option value="all" {% if entry_method_filter == 'all' %}selected{% endif %}>All Entry Methods</option>
+          {% for code, label in entry_methods %}
+          <option value="{{ code }}" {% if entry_method_filter == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="width: 180px;">
+        <select name="status" class="form-control" style="height: 40px; padding-right: 28px;">
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Statuses</option>
+          {% for code, label in statuses %}
+          <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="font-size: 13px; color: var(--text-secondary); margin: 0;">Date:</label>
+        <input type="date" name="date_from" value="{{ date_from }}" class="form-control" style="height: 40px; width: 150px;" title="From Date">
+        <span style="color: var(--text-muted);">&ndash;</span>
+        <input type="date" name="date_to" value="{{ date_to }}" class="form-control" style="height: 40px; width: 150px;" title="To Date">
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-left: auto;">
+        <button type="submit" class="btn btn-secondary btn-sm" style="height: 40px; padding: 0 18px;">
+          Filter Records
+        </button>
+        {% if query or type_filter != 'all' or mode_filter != 'all' or entry_method_filter != 'all' or status_filter != 'all' or date_from or date_to %}
+        <a href="{% url 'contributions:contribution_list' %}" class="btn btn-outline btn-sm" style="height: 40px; padding: 0 14px; display: inline-flex; align-items: center;">
+          Clear
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Contributions Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
+  <div class="table-responsive">
+    <table class="table" style="margin-bottom: 0;">
+      <thead>
+        <tr>
+          <th>Contribution ID</th>
+          <th>Contributor</th>
+          <th>Type</th>
+          <th>Payment Mode</th>
+          <th>Amount</th>
+          <th>Entry</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Receipt #</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in page_obj %}
+        <tr>
+          <td>
+            <a href="{% url 'contributions:contribution_detail' c.id %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: none;">
+              <code>{{ c.contribution_number }}</code>
+            </a>
+          </td>
+          <td>
+            {% if c.member %}
+              <a href="{% url 'members:member_detail' c.member.id %}" style="font-weight: 600; color: var(--navy-dark);">
+                {{ c.member.full_name }}
+              </a>
+              <div style="font-size: 11px; color: var(--text-muted);">{{ c.member.member_number }}</div>
+            {% elif c.temporary_contributor %}
+              <span style="font-weight: 600; color: var(--color-orange);">
+                {{ c.temporary_contributor.phone_number }}
+              </span>
+              <div style="font-size: 11px; color: var(--text-muted);">Temporary Contributor</div>
+            {% else %}
+              <span style="color: var(--text-muted);">Anonymous</span>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-weight: 600; color: var(--navy-dark);">{{ c.contribution_type.name }}</span>
+            {% if c.custom_type_description %}
+              <div style="font-size: 11px; color: var(--text-secondary); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ c.custom_type_description }}">
+                {{ c.custom_type_description }}
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <!-- Must explicitly display Bank Transaction -->
+            <span style="font-size: 13px;">{{ c.get_payment_mode_display }}</span>
+            {% if c.reference_number %}
+              <div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">{{ c.reference_number }}</div>
+            {% endif %}
+          </td>
+          <td style="font-weight: 700; color: var(--navy-dark); white-space: nowrap;">
+            {{ c.currency }} {{ c.amount|floatformat:2 }}
+          </td>
+          <td>
+            {% if c.entry_method == 'MANUAL' %}
+              <span class="badge" style="background: rgba(1, 19, 69, 0.08); color: var(--navy-dark);">Manual</span>
+            {% else %}
+              <span class="badge" style="background: rgba(43, 114, 186, 0.12); color: var(--color-blue);">Automatic</span>
+            {% endif %}
+          </td>
+          <td style="white-space: nowrap; font-size: 13px;">
+            {{ c.contribution_date|date:"M d, Y" }}
+          </td>
+          <td>
+            {% if c.status == 'CONFIRMED' %}
+              <span class="badge badge-success">Confirmed</span>
+            {% elif c.status == 'PENDING' %}
+              <span class="badge badge-warning">Pending</span>
+            {% elif c.status == 'FLAGGED' %}
+              <span class="badge" style="background: rgba(241, 104, 34, 0.15); color: var(--color-orange);">Flagged</span>
+            {% else %}
+              <span class="badge badge-danger">{{ c.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if c.receipt %}
+              <code>{{ c.receipt.receipt_number }}</code>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 12px;">&mdash;</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right; white-space: nowrap;">
+            <a href="{% url 'contributions:contribution_detail' c.id %}" class="btn btn-outline btn-sm" style="padding: 4px 10px; font-size: 12px;">
+              View Details
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="10" style="text-align: center; padding: 48px 16px; color: var(--text-muted);">
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 6px; color: var(--navy-dark);">No contribution records found</div>
+            <p style="font-size: 13px; max-width: 440px; margin: 0 auto 16px auto;">
+              {% if query or type_filter != 'all' or mode_filter != 'all' or entry_method_filter != 'all' or status_filter != 'all' or date_from or date_to %}
+                No contributions match your current filter parameters. Try clearing some filters.
+              {% else %}
+                No church contributions have been recorded yet. Click "Record Contribution" to create the first manual entry.
+              {% endif %}
+            </p>
+            {% if is_system_administrator or user|has_perm:"contribution.create" %}
+            <a href="{% url 'contributions:contribution_create' %}" class="btn btn-primary btn-sm">
+              Record First Contribution
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination Footer -->
+  {% if page_obj.has_other_pages %}
+  <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid var(--border-color); background: var(--bg-surface); flex-wrap: wrap; gap: 12px;">
+    <div style="font-size: 13px; color: var(--text-secondary);">
+      Showing <strong>{{ page_obj.start_index }}</strong> to <strong>{{ page_obj.end_index }}</strong> of <strong>{{ page_obj.paginator.count }}</strong> contributions
+    </div>
+    <div style="display: flex; gap: 6px;">
+      {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}&q={{ query }}&type={{ type_filter }}&mode={{ mode_filter }}&entry_method={{ entry_method_filter }}&status={{ status_filter }}&date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-outline btn-sm">
+        &lsaquo; Previous
+      </a>
+      {% endif %}
+
+      <span class="btn btn-outline btn-sm" style="cursor: default; background: white; font-weight: 600;">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+
+      {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}&q={{ query }}&type={{ type_filter }}&mode={{ mode_filter }}&entry_method={{ entry_method_filter }}&status={{ status_filter }}&date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-outline btn-sm">
+        Next &rsaquo;
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.utils import timezone
 from apps.core.models import UUIDBaseModel, TimeStampedModel
 from apps.core.services.id_generator import IdGenerator
 from apps.members.models import Member, TemporaryContributor
@@ -86,6 +87,13 @@ class PaymentTransaction(UUIDBaseModel):
         return f"{self.provider} [{self.provider_reference}] {self.amount} {self.currency} ({self.status})"
 
 
+class ContributionQuerySet(models.QuerySet):
+    """QuerySet that protects financial records from bulk physical deletion."""
+
+    def delete(self):
+        raise ValidationError("Financial contribution records cannot be physically deleted to preserve financial audit trail.")
+
+
 class Contribution(UUIDBaseModel):
     """
     Core contribution ledger record.
@@ -123,7 +131,8 @@ class Contribution(UUIDBaseModel):
     currency = models.CharField(max_length=3, default="GHS")
     payment_mode = models.CharField(max_length=40, choices=PaymentMode.choices)
     entry_method = models.CharField(max_length=20, choices=EntryMethod.choices)
-    reference_number = models.CharField(max_length=200, null=True, blank=True)
+    reference_number = models.CharField(max_length=200, null=True, blank=True, db_index=True)
+    contribution_date = models.DateField(default=timezone.localdate, db_index=True)
     status = models.CharField(
         max_length=30,
         choices=ContributionStatus.choices,
@@ -138,11 +147,13 @@ class Contribution(UUIDBaseModel):
         related_name="contributions_recorded"
     )
 
+    objects = ContributionQuerySet.as_manager()
+
     class Meta:
         db_table = "contributions"
         verbose_name = "Contribution"
         verbose_name_plural = "Contributions"
-        ordering = ["-created_at"]
+        ordering = ["-contribution_date", "-created_at"]
         constraints = [
             # Exactly one contributor identity: member XOR temporary_contributor
             models.CheckConstraint(
@@ -177,11 +188,26 @@ class Contribution(UUIDBaseModel):
         if self.amount is not None and self.amount <= Decimal("0.00"):
             raise ValidationError("Contribution amount must be greater than zero.")
 
+        # When contribution type is "Other", custom_type_description is required
+        if self.contribution_type_id:
+            try:
+                c_type = self.contribution_type
+                if c_type and c_type.name.strip().lower() == "other":
+                    if not self.custom_type_description or not self.custom_type_description.strip():
+                        raise ValidationError("Description is required when contribution type is 'Other'.")
+            except Exception:
+                pass
+
     def save(self, *args, **kwargs):
         if not self.contribution_number:
             self.contribution_number = IdGenerator.generate_contribution_number()
+        if not self.contribution_date:
+            self.contribution_date = timezone.localdate()
         self.full_clean()
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Financial contribution records cannot be physically deleted to preserve financial audit trail.")
 
     def __str__(self):
         contributor = self.member.full_name if self.member else str(self.temporary_contributor)

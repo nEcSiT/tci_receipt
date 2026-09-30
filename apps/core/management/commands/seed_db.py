@@ -28,6 +28,7 @@ class Command(BaseCommand):
 
         # 2. Seed Permissions
         permissions_data = [
+            ("contribution.view", "View Contributions", "View contribution records and details"),
             ("contribution.create", "Create Contribution", "Record manual contributions"),
             ("contribution.edit_own", "Edit Own Contribution", "Edit own manual contributions"),
             ("contribution.delete_own", "Delete Own Contribution", "Delete own manual contributions"),

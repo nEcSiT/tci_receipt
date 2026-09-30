@@ -1313,8 +1313,111 @@ The milestone is complete when:
 - `M2-BT-020`: Custom role pages display and configure the permissions assigned to that role.
 - `M2-BT-017`: Repeated failed login attempts are throttled.
 - `M2-BT-018`: External post-login redirects are rejected.
-- All Milestone 1 tests continue passing.
-- Current M2 regression target: 49 automated tests.
+- Current M2 regression target: 51 automated tests (including M1 & M2 test suites).
+
+---
+
+# 25.2 THIRD IMPLEMENTATION MILESTONE — MILESTONE 3
+
+**Milestone:** M3 — Member Management & Contributor Identification Foundation  
+**Status:** Completed — Full service layer, responsive UI templates, and automated test suite implemented; 65 total tests passing across M1, M2, and M3  
+**Depends on:** M1 — Core Infrastructure & Data Model, M2 — Authentication & Authorization  
+**Objective:** Build and validate the complete Member Management module, establishing verified member profiles, strict phone-based contributor identification, temporary contributor review/conversion/linking workflows, and System Administrator-controlled member merges.
+
+## Scope
+- **Included:**
+  - System-generated member ID (`MEM-000001` via `IdGenerator.generate_member_number()`)
+  - Member profile management (name, optional email, ministry, team, department, status)
+  - Multi-phone number management with strict active uniqueness across members and single active primary enforcement
+  - Inactive phone availability: releasing inactive phone numbers for reassignment while preserving historical records
+  - Strict contributor identification: transaction phone number is the sole identifier; name or account inference is strictly prohibited
+  - Temporary contributor queue: unverified incoming mobile money contributors automatically queued
+  - Temporary contributor conversion to new church member (preserving contributions and primary phone)
+  - Temporary contributor linking to existing church member (reassigning contributions and phone)
+  - Member merge request initiation by authorized staff
+  - Strict System Administrator merge approval boundary: atomic contribution reassignment, non-conflicting phone transfer, and source deactivation
+  - Full audit logging for member creation, edits, deactivations, phone assignments, reviews, and merges
+  - Member management UI:
+    - Member directory with search across member number, name, phone, email, and ministry/status filters
+    - Member profile view with phone management, giving history foundation, and merge actions
+    - Member registration and edit forms with validation styling
+    - Temporary contributor review dashboard with inline link and convert modals
+    - Member merge request management queue
+- **Excluded:**
+  - Automated payment webhook endpoints & external gateway polling (Milestone 4)
+  - Receipt generation & automated SMS/Email dispatch (Milestone 5)
+  - Requisitions & financial disbursements (Milestone 6)
+
+## Acceptance Criteria & Test Scenarios
+- `M3-BT-001`: Member creation generates system ID (`MEM-000001`) and assigns initial active primary phone.
+- `M3-BT-002`: Member supports multiple phone numbers with exactly one active primary phone.
+- `M3-BT-003`: Active phone conflict across members is rejected.
+- `M3-BT-004`: Inactive phone numbers can be reassigned to another member.
+- `M3-BT-005`: Member search correctly queries member number, name, phone, email, and status.
+- `M3-BT-006`: Contributor identification strictly matches on transaction phone number; provider name differences are disregarded.
+- `M3-BT-007`: Unrecognized transaction phone creates an unverified Temporary Contributor record.
+- `M3-BT-008`: Converting Temporary Contributor to member creates profile and reassigns contributions.
+- `M3-BT-009`: Linking Temporary Contributor to existing member reassigns contributions and updates phone list.
+- `M3-BT-010`: Member merge request requires reason and cannot merge a member to self.
+- `M3-BT-011`: System Administrator merge approval atomically reassigns contributions and phones, and deactivates source.
+- `M3-BT-012`: Non-administrator cannot approve or reject member merge requests.
+- `M3-BT-013`: Member deactivation preserves historical contributions, receipts, and audit trail.
+- `M3-BT-014`: Member management UI enforces role-based permission boundaries.
+- All Milestone 1 and Milestone 2 tests continue passing.
+- Current project regression target: 65 automated tests.
+
+---
+
+# 25.3 FOURTH IMPLEMENTATION MILESTONE — MILESTONE 4
+
+**Milestone:** M4 — Contribution Management  
+**Status:** Completed — Full service layer, UI workflows, duplicate protection rules, and automated test suite implemented; 71 total tests passing across M1, M2, M3, and M4  
+**Depends on:** M1 — Core Infrastructure & Data Model, M2 — Authentication & Authorization, M3 — Member Management & Contributor Identification  
+**Objective:** Build and validate the complete Church Contribution Management module, enabling authorized System Users to record, view, search, validate, and manage manual church contributions, establish duplicate protection foundation, integrate M3 member/phone resolution, and enforce append-only financial audit trails.
+
+## Scope
+- **Included:**
+  - System-generated contribution ID (`CON-00000001` via `IdGenerator.generate_contribution_number()`)
+  - Supported contribution types: Tithe, Thanksgiving, Higher Life Partners, Building Project, Other (with mandatory custom description for Other)
+  - Supported payment modes: Cash, Mobile Money, Cheque, Bank Transaction (explicitly displayed as "Bank Transaction"), Other
+  - Entry methods: Manual and Automatic
+  - Manual contribution recording for active church members with permission enforcement (`contribution.create`)
+  - Contributor association: Member / Contributor association with dynamic AJAX search, active member validation, and deactivated member blocking
+  - Financial record integrity: querysets and model deletion overrides prevent physical deletion of financial records
+  - Multi-criteria search and filtering: Contribution ID, Member name/number, Temporary contributor phone/name, Reference number, Provider reference, Receipt number, Contribution type, Payment mode, Entry method, Status, Date ranges
+  - Contribution detail view with contributor history, payment mode info, receipt cross-reference status, and full audit logs
+  - Automatic contribution foundation: `PaymentTransaction` model and status lifecycle (`PENDING`, `CONFIRMED`, `FAILED`, `DUPLICATE`)
+  - Duplicate-payment protection: Provider Reference Number + Contribution Type rule (exact duplicate blocked with `DUPLICATE` status; same provider reference with different type flagged for review with `PARTIAL` audit result)
+  - Strict M3 phone-based contributor resolution for automatic contributions
+  - Immutable audit logging for all contribution actions (`CONTRIBUTION_CREATED`, `AUTOMATIC_CONTRIBUTION_RECORDED`, `DUPLICATE_CONTRIBUTION_BLOCKED`, `CONTRIBUTION_FLAGGED_FOR_REVIEW`)
+  - Contribution UI:
+    - Contribution directory with KPI counters (Total Contributions, Confirmed Amount, Manual Count, Automatic Count)
+    - Manual contribution entry form with live member search, type description conditional display, and review card
+    - Contribution detail and audit inspection page
+    - Member AJAX search API endpoint (`/contributions/members/search/`)
+- **Excluded:**
+  - Live external payment-provider webhook integrations & polling daemons (Milestone 6)
+  - Receipt generation, PDF export, & automated notification dispatch (Milestone 5)
+  - Requisitions & financial disbursements (Milestone 7)
+
+## Acceptance Criteria & Test Scenarios
+- `M4-BT-001`: Manual contribution creation generates unique system ID (`CON-00000001`) and sets status to Confirmed.
+- `M4-BT-002`: All five contribution types are supported; "Other" requires a non-empty description.
+- `M4-BT-003`: All payment modes are supported and interface displays "Bank Transaction".
+- `M4-BT-004`: Contribution amount must be positive; non-numeric or zero/negative amounts are rejected.
+- `M4-BT-005`: Manual contributions require an active member; contributions for deactivated members are rejected.
+- `M4-BT-006`: Contribution creation enforces `contribution.create` permission.
+- `M4-BT-007`: Contribution viewing and detail pages enforce `contribution.view` permission.
+- `M4-BT-008`: Financial records cannot be physically deleted (bulk and instance delete are rejected).
+- `M4-BT-009`: Contribution creation and actions emit immutable audit log entries.
+- `M4-BT-010`: Contribution search filters by ID, member, phone, reference, type, mode, entry method, and dates.
+- `M4-BT-011`: Automatic contributions derive contributor strictly from transaction phone using M3 rules.
+- `M4-BT-012`: Duplicate transaction with identical provider reference and contribution type is blocked.
+- `M4-BT-013`: Duplicate transaction with identical provider reference but different type is flagged for review.
+- `M4-BT-014`: UI contribution creation workflow provides member search, validation, and redirect.
+- `M4-BT-015`: AJAX member search API endpoint returns matching active members.
+- All Milestone 1, 2, and 3 tests continue passing without regression.
+- Current project regression target: 71 automated tests.
 
 ---
 
