@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Member Merge Requests — TCI Higher Life Center{% endblock %}
+{% block page_title %}Member Merge & Linking{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<strong>Merge Requests</strong>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin-bottom: 4px;">Member Merge & Linking</h1>
+    <p style="font-size: 14px; color: var(--text-secondary);">
+      Formal request and approval governance for merging duplicate church member profiles.
+      Approval is strictly reserved for the System Administrator to ensure financial integrity.
+    </p>
+  </div>
+  <a href="{% url 'members:member_list' %}" class="btn btn-outline">
+    &larr; Back to Member Directory
+  </a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start;">
+  <!-- Left Column: Merge Requests Table -->
+  <div>
+    <!-- Filter Bar -->
+    <div class="card" style="padding: 14px 20px; margin-bottom: 20px;">
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Status:</span>
+        <a href="?status=PENDING" class="btn btn-sm {% if status_filter == 'PENDING' %}btn-primary{% else %}btn-outline{% endif %}">Pending</a>
+        <a href="?status=APPROVED" class="btn btn-sm {% if status_filter == 'APPROVED' %}btn-primary{% else %}btn-outline{% endif %}">Approved</a>
+        <a href="?status=REJECTED" class="btn btn-sm {% if status_filter == 'REJECTED' %}btn-primary{% else %}btn-outline{% endif %}">Rejected</a>
+        <a href="?status=all" class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline{% endif %}">All</a>
+      </div>
+    </div>
+
+    <!-- Requests Table -->
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Source Member (To Merge)</th>
+            <th>Target Member (Retained)</th>
+            <th>Reason</th>
+            <th>Requested By</th>
+            <th>Status</th>
+            {% if is_system_administrator %}
+            <th style="text-align: right;">Admin Action</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for req in merge_requests %}
+          <tr>
+            <td>
+              <div style="font-weight: 600; color: var(--navy-dark);">{{ req.source_member.full_name }}</div>
+              <div style="font-size: 12px; color: var(--text-secondary);"><code>{{ req.source_member.member_number }}</code></div>
+            </td>
+            <td>
+              <div style="font-weight: 600; color: var(--navy-dark);">{{ req.target_member.full_name }}</div>
+              <div style="font-size: 12px; color: var(--text-secondary);"><code>{{ req.target_member.member_number }}</code></div>
+            </td>
+            <td style="font-size: 13px; max-width: 200px;">{{ req.reason }}</td>
+            <td style="font-size: 13px;">
+              <div>{{ req.requested_by.full_name }}</div>
+              <div style="font-size: 11px; color: var(--text-secondary);">{{ req.created_at|date:"M d, Y" }}</div>
+            </td>
+            <td>
+              {% if req.status == 'PENDING' %}
+                <span class="badge badge-warning">Pending Review</span>
+              {% elif req.status == 'APPROVED' %}
+                <span class="badge badge-success">Approved</span>
+              {% else %}
+                <span class="badge badge-danger">Rejected</span>
+              {% endif %}
+            </td>
+            {% if is_system_administrator %}
+            <td style="text-align: right;">
+              {% if req.status == 'PENDING' %}
+              <div style="display: inline-flex; gap: 6px;">
+                <form method="post" action="{% url 'members:merge_review' req.id %}" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="decision" value="approve">
+                  <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Approve merge? All contributions from {{ req.source_member.member_number }} will be transferred to {{ req.target_member.member_number }} and the source member will be deactivated.')">
+                    Approve
+                  </button>
+                </form>
+                <form method="post" action="{% url 'members:merge_review' req.id %}" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="decision" value="reject">
+                  <button type="submit" class="btn btn-outline btn-sm" style="color: var(--color-orange);">
+                    Reject
+                  </button>
+                </form>
+              </div>
+              {% else %}
+              <div style="font-size: 12px; color: var(--text-secondary);">
+                Reviewed {{ req.reviewed_at|date:"M d" }} by {{ req.reviewed_by.first_name }}
+              </div>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 40px 16px; color: var(--text-muted);">
+              No merge requests found matching filter.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right Column: Request New Merge Form -->
+  <div>
+    <div class="card" style="padding: 24px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0 0 8px 0;">
+        Request Member Merge
+      </h3>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
+        Identify duplicate records to combine. Requires System Administrator authorization before records are merged.
+      </p>
+
+      {% if is_system_administrator or user|has_perm:"member.merge.request" %}
+      <form method="post" action="{% url 'members:merge_create' %}">
+        {% csrf_token %}
+
+        <div style="margin-bottom: 16px;">
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Source Member (Duplicate) <span style="color: var(--color-orange);">*</span>
+          </label>
+          <select name="source_member_id" required class="form-control">
+            <option value="">Select source member...</option>
+            {% for m in active_members %}
+            <option value="{{ m.id }}">{{ m.full_name }} ({{ m.member_number }})</option>
+            {% endfor %}
+          </select>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+            This profile will be soft-deactivated once merged.
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Target Member (To Keep) <span style="color: var(--color-orange);">*</span>
+          </label>
+          <select name="target_member_id" required class="form-control">
+            <option value="">Select target member...</option>
+            {% for m in active_members %}
+            <option value="{{ m.id }}">{{ m.full_name }} ({{ m.member_number }})</option>
+            {% endfor %}
+          </select>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+            This profile will receive all contributions and contact numbers.
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Reason for Merge <span style="color: var(--color-orange);">*</span>
+          </label>
+          <textarea name="reason" required rows="3" class="form-control" placeholder="e.g. Duplicate account created during church event with alternate spelling."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          Submit Merge Request
+        </button>
+      </form>
+      {% else %}
+      <div class="alert alert-warning" style="font-size: 13px;">
+        You do not have permission to request member merges. Please contact the System Administrator.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

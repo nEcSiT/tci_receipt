@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Temporary Contributors — TCI Higher Life Center{% endblock %}
+{% block page_title %}Temporary Contributors{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<strong>Temporary Contributors</strong>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin-bottom: 4px;">Temporary Contributors</h1>
+    <p style="font-size: 14px; color: var(--text-secondary);">
+      Unverified records automatically created from digital payments when the transaction phone number does not match any registered church member.
+    </p>
+  </div>
+  <a href="{% url 'members:member_list' %}" class="btn btn-outline">
+    &larr; Back to Member Directory
+  </a>
+</div>
+
+<!-- Filters Bar -->
+<div class="card" style="padding: 16px 20px; margin-bottom: 20px;">
+  <form method="get" action="{% url 'members:temporary_list' %}" style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 240px;">
+      <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search phone, provider name, or reference..." style="height: 40px;">
+    </div>
+
+    <div>
+      <select name="status" class="form-control" style="height: 40px; padding-right: 28px;" onchange="this.form.submit()">
+        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Statuses</option>
+        <option value="UNVERIFIED" {% if status_filter == 'UNVERIFIED' %}selected{% endif %}>Unverified</option>
+        <option value="UNDER_REVIEW" {% if status_filter == 'UNDER_REVIEW' %}selected{% endif %}>Under Review</option>
+        <option value="LINKED" {% if status_filter == 'LINKED' %}selected{% endif %}>Linked to Member</option>
+        <option value="CONVERTED" {% if status_filter == 'CONVERTED' %}selected{% endif %}>Converted to Member</option>
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-secondary btn-sm" style="height: 40px;">Filter</button>
+    {% if query or status_filter != 'UNVERIFIED' %}
+    <a href="{% url 'members:temporary_list' %}" class="btn btn-outline btn-sm" style="height: 40px;">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Temporary Contributors Table -->
+<div class="table-responsive">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Phone Number</th>
+        <th>Network Provider</th>
+        <th>Gateway Account Name</th>
+        <th>Status</th>
+        <th>Recorded On</th>
+        <th>Associated Member</th>
+        <th style="text-align: right;">Review Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tc in page_obj %}
+      <tr>
+        <td>
+          <span style="font-family: monospace; font-size: 15px; font-weight: 700; color: var(--navy-dark);">
+            {{ tc.phone_number }}
+          </span>
+        </td>
+        <td>{{ tc.provider|default:"Gateway" }}</td>
+        <td>
+          {% if tc.provider_name %}
+            <span style="font-weight: 600;">{{ tc.provider_name }}</span>
+          {% else %}
+            <span style="color: var(--text-muted); font-size: 13px;">Not returned</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if tc.status == 'UNVERIFIED' %}
+            <span class="badge badge-warning">Unverified</span>
+          {% elif tc.status == 'UNDER_REVIEW' %}
+            <span class="badge" style="background: var(--color-blue); color: #fff;">Under Review</span>
+          {% elif tc.status == 'LINKED' %}
+            <span class="badge badge-success">Linked</span>
+          {% elif tc.status == 'CONVERTED' %}
+            <span class="badge badge-success">Converted</span>
+          {% endif %}
+        </td>
+        <td style="font-size: 13px; color: var(--text-secondary);">
+          {{ tc.created_at|date:"M d, Y H:i" }}
+        </td>
+        <td>
+          {% if tc.converted_member %}
+            <a href="{% url 'members:member_detail' tc.converted_member.id %}" style="font-weight: 600; color: var(--navy-dark);">
+              {{ tc.converted_member.full_name }} ({{ tc.converted_member.member_number }})
+            </a>
+          {% else %}
+            <span style="color: var(--text-muted);">None</span>
+          {% endif %}
+        </td>
+        <td style="text-align: right;">
+          {% if tc.status == 'UNVERIFIED' or tc.status == 'UNDER_REVIEW' %}
+          <div style="display: inline-flex; gap: 8px; justify-content: flex-end;">
+            {% if tc.status == 'UNVERIFIED' %}
+            <form method="post" action="{% url 'members:temporary_action' tc.id %}" style="display: inline;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="under_review">
+              <button type="submit" class="btn btn-outline btn-sm">Review</button>
+            </form>
+            {% endif %}
+
+            <!-- Link Trigger Button -->
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('linkModal-{{ tc.id }}').style.display='block'">
+              Link
+            </button>
+
+            <!-- Convert Trigger Button -->
+            <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('convertModal-{{ tc.id }}').style.display='block'">
+              Convert
+            </button>
+          </div>
+
+          <!-- Link Modal -->
+          <div id="linkModal-{{ tc.id }}" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+            <div class="card" style="max-width: 480px; margin: 100px auto; padding: 24px;">
+              <h3 style="font-size: 18px; font-weight: 700; color: var(--navy-dark); margin: 0 0 8px 0;">
+                Link to Existing Member
+              </h3>
+              <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+                Reassign all contributions from <strong>{{ tc.phone_number }}</strong> to a verified member profile.
+              </p>
+              <form method="post" action="{% url 'members:temporary_action' tc.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="link">
+                <div style="margin-bottom: 16px;">
+                  <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">Select Church Member</label>
+                  <select name="target_member_id" required class="form-control">
+                    <option value="">Select verified member...</option>
+                    {% for m in members %}
+                    <option value="{{ m.id }}">{{ m.full_name }} ({{ m.member_number }})</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                  <input type="checkbox" name="add_phone" id="addPhone-{{ tc.id }}" checked>
+                  <label for="addPhone-{{ tc.id }}" style="font-size: 13px; cursor: pointer;">
+                    Also add {{ tc.phone_number }} as an active secondary phone on this member
+                  </label>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                  <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('linkModal-{{ tc.id }}').style.display='none'">Cancel</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Confirm Link</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Convert Modal -->
+          <div id="convertModal-{{ tc.id }}" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+            <div class="card" style="max-width: 520px; margin: 80px auto; padding: 24px;">
+              <h3 style="font-size: 18px; font-weight: 700; color: var(--navy-dark); margin: 0 0 8px 0;">
+                Convert to New Member
+              </h3>
+              <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+                Create a permanent member record for <strong>{{ tc.phone_number }}</strong>. All past contributions will be preserved and reassigned.
+              </p>
+              <form method="post" action="{% url 'members:temporary_action' tc.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="convert">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                  <div>
+                    <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 4px;">First Name *</label>
+                    <input type="text" name="first_name" required value="{{ tc.first_name|default:'' }}" class="form-control" placeholder="Kwame">
+                  </div>
+                  <div>
+                    <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 4px;">Last Name *</label>
+                    <input type="text" name="last_name" required value="{{ tc.last_name|default:'' }}" class="form-control" placeholder="Mensah">
+                  </div>
+                </div>
+                <div style="margin-bottom: 12px;">
+                  <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 4px;">Email (optional)</label>
+                  <input type="email" name="email" class="form-control" placeholder="member@example.com">
+                </div>
+                <div style="margin-bottom: 20px;">
+                  <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 4px;">Ministry (optional)</label>
+                  <input type="text" name="ministry" class="form-control" placeholder="e.g. Youth Ministry">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                  <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('convertModal-{{ tc.id }}').style.display='none'">Cancel</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Create & Convert</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          {% else %}
+          <span style="color: var(--text-muted); font-size: 13px;">Resolved</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 40px 16px; color: var(--text-muted);">
+          No temporary contributor records found.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; font-size: 14px; color: var(--text-secondary);">
+  <div>Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+  <div style="display: flex; gap: 8px;">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+    {% endif %}
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
