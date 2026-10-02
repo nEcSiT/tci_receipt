@@ -68,6 +68,12 @@ class User(AbstractBaseUser, UUIDBaseModel):
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip()
 
+    def get_full_name(self):
+        return self.full_name
+
+    def get_short_name(self):
+        return self.first_name
+
     @property
     def is_system_administrator(self) -> bool:
         """Checks if this user is the single System Administrator."""

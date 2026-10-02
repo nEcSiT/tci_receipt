@@ -17,12 +17,21 @@
   --white: #FFFFFF;
   --surface: #F7F8FA;
   --surface-subtle: #F1F3F6;
+  --bg-surface: var(--surface);
   --text-primary: #101828;
   --text-secondary: #475467;
   --text-muted: #667085;
   --border: #D0D5DD;
   --border-strong: #98A2B3;
+  --border-color: var(--border);
   --overlay: rgba(1, 19, 69, 0.8);
+
+  /* Color aliases used across templates */
+  --navy-dark: var(--brand-navy);
+  --color-green: var(--brand-green);
+  --color-orange: var(--brand-orange);
+  --color-yellow: var(--brand-yellow);
+  --color-blue: var(--brand-blue);
 
   /* 3. Semantic States */
   --success: #16803C;
@@ -87,6 +96,18 @@ h1, h2, h3, h4, h5, h6 {
 
 .font-editorial {
   font-family: var(--font-serif);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-muted);
 }
 
 a {
@@ -267,7 +288,8 @@ a:hover {
   color: var(--warning);
 }
 
-.badge-error {
+.badge-error,
+.badge-danger {
   background-color: var(--error-soft);
   color: var(--error);
 }
@@ -330,6 +352,13 @@ a:hover {
   font-size: 13px;
   color: var(--error);
   margin-top: 4px;
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
 /* ==========================================================================
@@ -563,6 +592,23 @@ a:hover {
 .app-content {
   padding: 32px;
   flex: 1;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.dashboard-header {
+  margin-bottom: 28px;
+}
+
+.messages-container {
+  margin-bottom: var(--space-4);
 }
 
 /* ==========================================================================

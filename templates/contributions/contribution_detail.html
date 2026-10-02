@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Contribution {{ contribution.contribution_number }} — TCI Higher Life Center{% endblock %}
+{% block page_title %}Contribution Details{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'contributions:contribution_list' %}">Contributions</a> &rsaquo;
+<strong>{{ contribution.contribution_number }}</strong>
+{% endblock %}
+
+{% block content %}
+<!-- Contribution Header -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+      <h1 style="font-size: 26px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+        <code>{{ contribution.contribution_number }}</code>
+      </h1>
+      {% if contribution.status == 'CONFIRMED' %}
+        <span class="badge badge-success">Confirmed</span>
+      {% elif contribution.status == 'PENDING' %}
+        <span class="badge badge-warning">Pending</span>
+      {% elif contribution.status == 'FLAGGED' %}
+        <span class="badge" style="background: rgba(241, 104, 34, 0.15); color: var(--color-orange);">Flagged for Review</span>
+      {% else %}
+        <span class="badge badge-danger">{{ contribution.status }}</span>
+      {% endif %}
+
+      {% if contribution.entry_method == 'MANUAL' %}
+        <span class="badge" style="background: rgba(1, 19, 69, 0.08); color: var(--navy-dark);">Manual Entry</span>
+      {% else %}
+        <span class="badge" style="background: rgba(43, 114, 186, 0.12); color: var(--color-blue);">Automatic Digital</span>
+      {% endif %}
+    </div>
+
+    <div style="font-size: 14px; color: var(--text-secondary); display: flex; gap: 16px; flex-wrap: wrap;">
+      <span>Recorded: <strong>{{ contribution.created_at|date:"M d, Y H:i" }} UTC</strong></span>
+      <span>Contribution Date: <strong>{{ contribution.contribution_date|date:"M d, Y" }}</strong></span>
+      {% if contribution.recorded_by %}
+      <span>Recorded By: <strong>{{ contribution.recorded_by.get_full_name|default:contribution.recorded_by.email }}</strong></span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="{% url 'contributions:contribution_list' %}" class="btn btn-outline">
+      &lsaquo; Back to List
+    </a>
+    {% if is_system_administrator or user|has_perm:"contribution.create" %}
+    <a href="{% url 'contributions:contribution_create' %}" class="btn btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Record Another
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Main Details Layout Grid -->
+<div style="display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;">
+  <!-- Left Column: Contributor & Financial Summary Card -->
+  <div>
+    <!-- Contributor Identity Card -->
+    <div class="card" style="padding: 24px; margin-bottom: 20px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        Contributor Identity
+      </h3>
+
+      {% if contribution.member %}
+      <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Member Name</div>
+          <div style="font-weight: 700; color: var(--navy-dark); margin-top: 2px; font-size: 16px;">
+            {{ contribution.member.full_name }}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Member Number</div>
+          <div style="margin-top: 2px;">
+            <a href="{% url 'members:member_detail' contribution.member.id %}" style="font-weight: 700; text-decoration: none;">
+              <code>{{ contribution.member.member_number }}</code>
+            </a>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Member Status</div>
+          <div style="margin-top: 2px;">
+            {% if contribution.member.status == 'ACTIVE' %}
+              <span class="badge badge-success">Active</span>
+            {% elif contribution.member.status == 'INACTIVE' %}
+              <span class="badge badge-warning">Inactive</span>
+            {% else %}
+              <span class="badge badge-danger">Deactivated</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if contribution.member.email %}
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Email Address</div>
+          <div style="margin-top: 2px;">
+            <a href="mailto:{{ contribution.member.email }}" style="color: var(--navy-dark);">{{ contribution.member.email }}</a>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if contribution.member.ministry %}
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Ministry</div>
+          <div style="margin-top: 2px;">
+            <span class="badge" style="background: rgba(1, 19, 69, 0.08); color: var(--navy-dark);">{{ contribution.member.ministry }}</span>
+          </div>
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 8px;">
+          <a href="{% url 'members:member_detail' contribution.member.id %}" class="btn btn-outline btn-sm" style="width: 100%; text-align: center;">
+            View Member Profile &rsaquo;
+          </a>
+        </div>
+      </div>
+
+      {% elif contribution.temporary_contributor %}
+      <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
+        <div class="alert alert-warning" style="padding: 10px 14px; font-size: 13px; margin-bottom: 4px;">
+          This contribution originated from an unlinked temporary contributor.
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Transaction Phone Number</div>
+          <div style="font-weight: 700; color: var(--navy-dark); margin-top: 2px; font-size: 16px;">
+            <code>{{ contribution.temporary_contributor.phone_number }}</code>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Network / Provider</div>
+          <div style="margin-top: 2px;">{{ contribution.temporary_contributor.provider|default:"Digital Payment" }}</div>
+        </div>
+
+        {% if contribution.temporary_contributor.first_name %}
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Name (if recorded)</div>
+          <div style="margin-top: 2px;">{{ contribution.temporary_contributor.first_name }} {{ contribution.temporary_contributor.last_name }}</div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Amount Highlight Card -->
+    <div class="card" style="padding: 24px; background: linear-gradient(135deg, rgba(1, 19, 69, 0.04) 0%, rgba(241, 104, 34, 0.04) 100%); border: 1px solid var(--border-color);">
+      <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
+        Contribution Amount
+      </div>
+      <div style="font-size: 32px; font-weight: 700; color: var(--navy-dark); margin-top: 6px;">
+        {{ contribution.currency }} {{ contribution.amount|floatformat:2 }}
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary); margin-top: 6px;">
+        Category: <strong>{{ contribution.contribution_type.name }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Contribution Specifications, System Info, and Audit History -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Contribution Specifications Card -->
+    <div class="card" style="padding: 24px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        Financial & Payment Specifications
+      </h3>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; font-size: 14px;">
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Contribution ID</div>
+          <div style="font-weight: 700; margin-top: 2px;">
+            <code>{{ contribution.contribution_number }}</code>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">Permanent internal business identifier</div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Payment Mode</div>
+          <div style="font-weight: 700; color: var(--navy-dark); margin-top: 2px;">
+            <!-- Explicitly Bank Transaction, not shortened -->
+            {{ contribution.get_payment_mode_display }}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Contribution Category</div>
+          <div style="font-weight: 600; color: var(--navy-dark); margin-top: 2px;">
+            {{ contribution.contribution_type.name }}
+          </div>
+          {% if contribution.custom_type_description %}
+          <div style="font-size: 12px; color: var(--color-orange); margin-top: 2px;">
+            Purpose: <em>{{ contribution.custom_type_description }}</em>
+          </div>
+          {% endif %}
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Transaction / Reference #</div>
+          <div style="font-weight: 600; margin-top: 2px;">
+            {% if contribution.reference_number %}
+              <code>{{ contribution.reference_number }}</code>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 13px;">None provided</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Contribution Date</div>
+          <div style="font-weight: 600; color: var(--navy-dark); margin-top: 2px;">
+            {{ contribution.contribution_date|date:"F d, Y" }}
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">When contribution actually occurred</div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Entry Method</div>
+          <div style="font-weight: 600; margin-top: 2px;">
+            {{ contribution.get_entry_method_display }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- System Ledger & Receipt Linkage Card -->
+    <div class="card" style="padding: 24px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        System Information & Receipt Linkage
+      </h3>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; font-size: 14px;">
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Recorded By</div>
+          <div style="font-weight: 600; margin-top: 2px;">
+            {% if contribution.recorded_by %}
+              {{ contribution.recorded_by.get_full_name|default:contribution.recorded_by.email }}
+            {% else %}
+              <span style="color: var(--text-muted);">System / Gateway</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">System Timestamp (Created At)</div>
+          <div style="margin-top: 2px;">
+            {{ contribution.created_at|date:"M d, Y H:i:s" }} UTC
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">Exact server insertion timestamp</div>
+        </div>
+
+        <!-- Receipt Status (Official Receipt Linkage) -->
+        <div style="grid-column: span 2; background: var(--bg-surface); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
+            Official Receipt Linkage
+          </div>
+          {% if receipt %}
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div>
+                Receipt Number: <a href="{% url 'receipts:receipt_detail' receipt.id %}" style="font-size: 15px; font-weight: 700; color: var(--navy-dark); text-decoration: none;"><code><strong>{{ receipt.receipt_number }}</strong></code></a>
+                {% if receipt.status == 'ACTIVE' %}
+                  <span class="badge badge-success" style="margin-left: 8px;">Active</span>
+                {% else %}
+                  <span class="badge badge-danger" style="margin-left: 8px;">Deleted / Revoked</span>
+                {% endif %}
+                {% if receipt.generated_by_system %}
+                  <span class="badge badge-info" style="margin-left: 6px;">Automatic</span>
+                {% else %}
+                  <span class="badge badge-neutral" style="margin-left: 6px;">Manual</span>
+                {% endif %}
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <a href="{% url 'receipts:receipt_detail' receipt.id %}" class="btn btn-outline btn-sm">View Receipt</a>
+                <a href="{% url 'receipts:receipt_pdf' receipt.id %}" target="_blank" class="btn btn-primary btn-sm">Download PDF</a>
+              </div>
+            </div>
+          {% else %}
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div style="font-size: 13px; color: var(--text-secondary);">
+                <em>No receipt has been generated yet for this contribution.</em>
+              </div>
+              <form method="post" action="{% url 'receipts:receipt_generate' contribution.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Generate Official Receipt
+                </button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Payment Transaction Linkage (if Automatic) -->
+        {% if contribution.payment_transaction %}
+        <div style="grid-column: span 2; background: rgba(43, 114, 186, 0.04); padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(43, 114, 186, 0.2);">
+          <div style="font-size: 12px; color: var(--color-blue); text-transform: uppercase; font-weight: 600; margin-bottom: 6px;">
+            Related Inbound Payment Transaction (Gateway Foundation)
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; font-size: 13px;">
+            <div>
+              <span style="color: var(--text-secondary);">Provider:</span>
+              <strong>{{ contribution.payment_transaction.provider }}</strong>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary);">Provider Ref:</span>
+              <code>{{ contribution.payment_transaction.provider_reference }}</code>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary);">Phone:</span>
+              <code>{{ contribution.payment_transaction.transaction_phone }}</code>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary);">Status:</span>
+              <strong>{{ contribution.payment_transaction.status }}</strong>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary);">Confirmed At:</span>
+              {{ contribution.payment_transaction.confirmed_at|date:"M d, Y H:i"|default:"Pending" }}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Immutable Audit Trail History -->
+    <div class="card" style="padding: 24px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        Activity & Audit History
+      </h3>
+
+      <div class="table-responsive">
+        <table class="table" style="font-size: 13px;">
+          <thead>
+            <tr>
+              <th>Date & Time</th>
+              <th>Action</th>
+              <th>Actor</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in audit_logs %}
+            <tr>
+              <td style="white-space: nowrap;">{{ log.created_at|date:"M d, Y H:i:s" }}</td>
+              <td><code>{{ log.action }}</code></td>
+              <td>
+                {% if log.user %}
+                  {{ log.user.get_full_name|default:log.user.email }}
+                {% else %}
+                  <span style="color: var(--text-muted);">{{ log.actor_type }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if log.result == 'SUCCESS' %}
+                  <span class="badge badge-success" style="font-size: 11px;">Success</span>
+                {% elif log.result == 'PARTIAL' %}
+                  <span class="badge badge-warning" style="font-size: 11px;">Flagged</span>
+                {% else %}
+                  <span class="badge badge-danger" style="font-size: 11px;">{{ log.result }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                No audit records found for this contribution.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

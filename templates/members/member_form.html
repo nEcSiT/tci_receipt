@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}
+{% if is_create %}Register Member{% else %}Edit {{ member.full_name }}{% endif %} — TCI Higher Life Center
+{% endblock %}
+
+{% block page_title %}
+{% if is_create %}Register Church Member{% else %}Edit Member Profile{% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<strong>{% if is_create %}Register{% else %}Edit Details{% endif %}</strong>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 760px; margin: 0 auto;">
+  <div class="card" style="padding: 32px;">
+    <div style="margin-bottom: 24px;">
+      <h2 style="font-size: 20px; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+        {% if is_create %}New Member Registration{% else %}Edit Member: {{ member.full_name }}{% endif %}
+      </h2>
+      <p style="font-size: 14px; color: var(--text-secondary);">
+        {% if is_create %}
+          Create a permanent church member record. A unique Member ID will be generated automatically.
+        {% else %}
+          Update demographic, contact, and ministry assignment details.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom: 24px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+
+      <!-- Name Fields -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            First Name <span style="color: var(--color-orange);">*</span>
+          </label>
+          <input type="text" name="first_name" required value="{{ form_data.first_name|default:'' }}" class="form-control" placeholder="e.g. Kwame">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Middle Name <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="text" name="middle_name" value="{{ form_data.middle_name|default:'' }}" class="form-control" placeholder="e.g. Kofi">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Last Name <span style="color: var(--color-orange);">*</span>
+          </label>
+          <input type="text" name="last_name" required value="{{ form_data.last_name|default:'' }}" class="form-control" placeholder="e.g. Mensah">
+        </div>
+      </div>
+
+      <!-- Contact Fields -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Email Address <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="email" name="email" value="{{ form_data.email|default:'' }}" class="form-control" placeholder="e.g. member@example.com">
+        </div>
+
+        {% if is_create %}
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Primary Phone Number <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="text" name="phone_number" value="{{ form_data.phone_number|default:'' }}" class="form-control" placeholder="e.g. +233240000000">
+        </div>
+        {% else %}
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Member ID
+          </label>
+          <input type="text" disabled value="{{ member.member_number }}" class="form-control" style="background: rgba(0,0,0,0.03); font-weight: 700;">
+        </div>
+        {% endif %}
+      </div>
+
+      {% if is_create %}
+      <!-- Provider Selection for Initial Phone -->
+      <div style="margin-bottom: 20px;">
+        <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+          Mobile Network / Provider <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+        </label>
+        <select name="phone_provider" class="form-control">
+          <option value="">Select network provider...</option>
+          <option value="MTN" {% if form_data.phone_provider == 'MTN' %}selected{% endif %}>MTN Mobile Money</option>
+          <option value="Telecel" {% if form_data.phone_provider == 'Telecel' %}selected{% endif %}>Telecel Cash</option>
+          <option value="AT" {% if form_data.phone_provider == 'AT' %}selected{% endif %}>AT Money</option>
+          <option value="Other" {% if form_data.phone_provider == 'Other' %}selected{% endif %}>Other Network / Landline</option>
+        </select>
+        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+          Additional phone numbers can be added anytime from the member's profile page.
+        </div>
+      </div>
+      {% endif %}
+
+      <div style="border-top: 1px solid var(--border-color); margin: 24px 0 20px 0;"></div>
+
+      <div style="margin-bottom: 16px;">
+        <h3 style="font-size: 15px; font-weight: 700; color: var(--navy-dark); margin-bottom: 4px;">Church Ministry & Placement</h3>
+        <p style="font-size: 13px; color: var(--text-secondary);">Assign member to a church group, active volunteer team, or department.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 28px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Ministry
+          </label>
+          <input type="text" name="ministry" value="{{ form_data.ministry|default:'' }}" class="form-control" placeholder="e.g. Youth Ministry">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Team
+          </label>
+          <input type="text" name="team" value="{{ form_data.team|default:'' }}" class="form-control" placeholder="e.g. Protocol">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Department
+          </label>
+          <input type="text" name="department" value="{{ form_data.department|default:'' }}" class="form-control" placeholder="e.g. Welfare">
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 12px;">
+        <a href="{% if is_create %}{% url 'members:member_list' %}{% else %}{% url 'members:member_detail' member.id %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          {% if is_create %}Register Member{% else %}Save Changes{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
