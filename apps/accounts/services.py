@@ -437,7 +437,7 @@ class UserService:
             raise ValidationError("A valid active role created by the System Administrator is required.")
 
         if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
-            raise ValidationError("A System User cannot be assigned a protected system role.")
+            raise ValidationError(f"The {role.name} role is a protected system role and cannot be assigned to a System User.")
 
         if not creator.is_active or (not creator.is_system_administrator and not creator.has_permission("user.manage")):
             raise ValidationError("You do not have permission to manage system users.")
@@ -492,7 +492,7 @@ class UserService:
             if not new_role:
                 raise ValidationError("A valid active role created by the System Administrator is required.")
             if new_role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
-                raise ValidationError("Protected system roles cannot be assigned to System Users.")
+                raise ValidationError(f"The {new_role.name} role is a protected system role and cannot be assigned to a System User.")
 
         old_user_role = user.user_roles.first()
         old_values = {

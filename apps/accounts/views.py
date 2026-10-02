@@ -329,7 +329,7 @@ class UserCreateView(View):
         if not (request.user.is_system_administrator or request.user.has_permission("user.manage")):
             raise PermissionDenied("You do not have permission to create users.")
 
-        roles = Role.objects.filter(is_active=True)
+        roles = Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER])
         return render(request, "accounts/user_form.html", {
             "roles": roles,
             "is_create": True,
@@ -359,7 +359,7 @@ class UserCreateView(View):
             messages.success(request, f"System User '{user.full_name}' was created successfully.")
             return redirect("accounts:user_list")
         except (ValidationError, Exception) as e:
-            roles = Role.objects.filter(is_active=True)
+            roles = Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER])
             return render(request, "accounts/user_form.html", {
                 "roles": roles,
                 "is_create": True,
@@ -396,7 +396,7 @@ class UserEditView(View):
             raise PermissionDenied("You do not have permission to edit users.")
 
         user = get_object_or_404(User, id=user_id)
-        roles = Role.objects.filter(is_active=True)
+        roles = Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER])
         return render(request, "accounts/user_form.html", {
             "target_user": user,
             "roles": roles,
@@ -425,7 +425,7 @@ class UserEditView(View):
             messages.success(request, f"User '{user.full_name}' updated successfully.")
             return redirect("accounts:user_detail", user_id=user.id)
         except (ValidationError, Exception) as e:
-            roles = Role.objects.filter(is_active=True)
+            roles = Role.objects.filter(is_active=True).exclude(name__in=[Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER])
             return render(request, "accounts/user_form.html", {
                 "target_user": user,
                 "roles": roles,
