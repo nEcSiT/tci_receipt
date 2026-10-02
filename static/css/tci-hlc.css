@@ -430,23 +430,35 @@ a:hover {
 }
 
 .sidebar-header {
-  padding: 24px 20px;
+  padding: 24px 16px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
 }
 
 .sidebar-logo {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  text-align: center;
   color: var(--white);
   text-decoration: none;
 }
 
+.sidebar-logo img,
+.sidebar-logo-img {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 12px auto;
+}
+
 .sidebar-logo-text {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.3px;
   color: var(--white);
+  text-align: center;
 }
 
 .sidebar-sublogo {
@@ -455,6 +467,8 @@ a:hover {
   letter-spacing: 0.08em;
   color: var(--brand-yellow);
   font-weight: 600;
+  text-align: center;
+  margin-top: 4px;
 }
 
 .sidebar-nav {
@@ -663,10 +677,12 @@ a:hover {
   color: var(--white);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  align-items: center;
   padding: 60px 48px;
   position: relative;
   overflow: hidden;
+  gap: 48px;
 }
 
 .auth-brand-side::after {
@@ -688,28 +704,33 @@ a:hover {
 }
 
 .auth-brand-statement {
-  max-width: 440px;
-  margin: auto 0;
+  max-width: 460px;
+  margin: 0 auto;
+  text-align: center;
 }
 
 .auth-brand-statement h2 {
   font-family: var(--font-serif);
   font-size: 32px;
   color: var(--white);
-  line-height: 1.3;
+  line-height: 1.35;
   margin-bottom: 16px;
   font-weight: 400;
+  text-align: center;
 }
 
 .auth-brand-statement p {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.75);
   font-size: 16px;
   line-height: 1.6;
+  text-align: center;
+  margin: 0 auto;
 }
 
 .auth-brand-footer {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.45);
+  text-align: center;
 }
 
 .auth-form-side {
@@ -717,12 +738,20 @@ a:hover {
   background-color: var(--white);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
   padding: 48px;
 }
 
 .auth-form-box {
   width: 100%;
+  margin: auto 0;
+}
+
+.auth-form-footer {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding-top: 16px;
 }
 
 .auth-title {
