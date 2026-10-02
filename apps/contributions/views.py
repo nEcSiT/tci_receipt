@@ -326,6 +326,8 @@ class PaymentWebhookView(View):
             return JsonResponse({"error": f"Invalid payload: {str(e)}"}, status=400)
 
         provider = get_payment_provider()
+        if not provider.verify_webhook(request.body, {key: value for key, value in request.headers.items()}):
+            return JsonResponse({"error": "Webhook authentication failed."}, status=401)
         payment_result = provider.parse_webhook(payload)
 
         # Extract contribution type or default to General / Tithe
