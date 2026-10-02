@@ -23,7 +23,13 @@ from apps.notifications.models import (
     ManualActionPriority,
     ManualActionStatus,
 )
-from apps.receipts.models import Receipt, ReceiptStatus, ReceiptEdit, ReceiptDeliveryRecord
+from apps.receipts.models import (
+    Receipt,
+    ReceiptStatus,
+    ReceiptEdit,
+    ReceiptDeliveryRecord,
+    ReceiptGenerationAttempt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +46,22 @@ class ReceiptPdfService:
         """
         Renders the PDF template for a receipt and compiles it into bytes.
         """
+        import base64
         import weasyprint
+
+        logo_path = settings.BASE_DIR / "static" / "img" / "tci_hlc-logo.png"
+        logo_base64 = ""
+        if logo_path.exists():
+            try:
+                with open(logo_path, "rb") as f:
+                    logo_base64 = f"data:image/png;base64,{base64.b64encode(f.read()).decode('utf-8')}"
+            except Exception:
+                logo_base64 = ""
 
         context = {
             "receipt": receipt,
             "verification_url": f"/receipts/verify/{receipt.receipt_number}/",
+            "logo_base64": logo_base64,
         }
         html_string = render_to_string("receipts/receipt_pdf.html", context)
         html = weasyprint.HTML(string=html_string)
@@ -541,3 +558,128 @@ class ReceiptService:
             ).first()
         except (BadSignature, SignatureExpired):
             return None
+
+
+class ReceiptRetryService:
+    """
+    Manages automatic receipt generation with up to 3 retry attempts (Section 6.20).
+    Preserves attempt history, creates a Manual Action on the 3rd failed attempt,
+    and guarantees the underlying contribution remains valid and intact.
+    """
+
+    MAX_ATTEMPTS = 3
+
+    @classmethod
+    def generate_receipt_with_retry(
+        cls,
+        contribution: Contribution,
+        max_attempts: int = MAX_ATTEMPTS,
+        actor: User | None = None,
+        simulate_failure_count: int = 0,
+    ) -> Receipt | None:
+        """
+        Attempts automatic receipt generation up to max_attempts.
+        Records each attempt in ReceiptGenerationAttempt.
+        If all attempts fail, creates a Manual Action.
+        Never discards or modifies the contribution.
+        """
+        existing = Receipt.all_objects.filter(contribution=contribution).first()
+        if existing:
+            return existing
+
+        current_attempts = ReceiptGenerationAttempt.objects.filter(contribution=contribution).count()
+        remaining_simulate = simulate_failure_count
+
+        for attempt_no in range(current_attempts + 1, max_attempts + 1):
+            try:
+                if remaining_simulate > 0:
+                    remaining_simulate -= 1
+                    raise RuntimeError("Simulated receipt PDF rendering / storage failure.")
+
+                receipt = ReceiptService.generate_receipt(
+                    contribution=contribution,
+                    is_system=True,
+                    actor=actor,
+                )
+                ReceiptGenerationAttempt.objects.create(
+                    contribution=contribution,
+                    attempt_number=attempt_no,
+                    status="SUCCESS",
+                )
+                AuditService.log(
+                    action="RECEIPT_GENERATION_SUCCESS",
+                    entity_type="Receipt",
+                    entity_id=receipt.id,
+                    user=actor,
+                    new_values={
+                        "attempt_number": attempt_no,
+                        "receipt_number": receipt.receipt_number,
+                        "contribution_number": contribution.contribution_number,
+                    },
+                    result=AuditResult.SUCCESS,
+                )
+                return receipt
+
+            except Exception as e:
+                err_msg = str(e)
+                ReceiptGenerationAttempt.objects.create(
+                    contribution=contribution,
+                    attempt_number=attempt_no,
+                    status="FAILED",
+                    failure_reason=err_msg,
+                )
+                logger.warning(
+                    "Receipt generation attempt #%d failed for contribution %s: %s",
+                    attempt_no,
+                    contribution.contribution_number,
+                    err_msg,
+                )
+                AuditService.log(
+                    action="RECEIPT_GENERATION_FAILED_ATTEMPT",
+                    entity_type="Contribution",
+                    entity_id=contribution.id,
+                    user=actor,
+                    new_values={
+                        "attempt_number": attempt_no,
+                        "error": err_msg,
+                        "contribution_number": contribution.contribution_number,
+                    },
+                    result=AuditResult.FAILURE,
+                )
+
+                if attempt_no >= max_attempts:
+                    # Create Manual Action on 3rd failure
+                    action = ManualAction.objects.filter(
+                        related_record_type="Contribution",
+                        related_record_id=contribution.id,
+                        action_type=ManualActionType.RECEIPT_GENERATION_FAILED,
+                    ).first()
+                    if not action:
+                        action = ManualAction.objects.create(
+                            action_type=ManualActionType.RECEIPT_GENERATION_FAILED,
+                            related_record_type="Contribution",
+                            related_record_id=contribution.id,
+                            description=(
+                                f"Automatic receipt generation failed {max_attempts} times for contribution "
+                                f"{contribution.contribution_number}. Failure: {err_msg}"
+                            ),
+                            attempt_count=max_attempts,
+                            priority=ManualActionPriority.HIGH,
+                            status=ManualActionStatus.OPEN,
+                        )
+                        AuditService.log(
+                            action="RECEIPT_GENERATION_MANUAL_ACTION_REQUIRED",
+                            entity_type="ManualAction",
+                            entity_id=action.id,
+                            user=actor,
+                            new_values={
+                                "contribution_id": str(contribution.id),
+                                "contribution_number": contribution.contribution_number,
+                                "attempt_count": max_attempts,
+                                "failure_reason": err_msg,
+                            },
+                            result=AuditResult.PARTIAL,
+                        )
+                    return None
+
+        return None

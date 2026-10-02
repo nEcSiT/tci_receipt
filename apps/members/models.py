@@ -159,6 +159,20 @@ class TemporaryContributor(UUIDBaseModel):
         name = f"{self.first_name} {self.last_name}".strip() or self.provider_name or "Unknown"
         return f"{name} ({self.phone_number}) [{self.status}]"
 
+    @property
+    def name(self) -> str:
+        parts = [self.first_name, self.last_name]
+        full = " ".join([p for p in parts if p]).strip()
+        if full:
+            return full
+        if self.provider_name:
+            return self.provider_name
+        return ""
+
+    @property
+    def full_name(self) -> str:
+        return self.name
+
 
 class MemberMergeRequest(UUIDBaseModel):
     """

@@ -214,3 +214,28 @@ class ReceiptDeliveryRecord(UUIDBaseModel):
 
     def __str__(self):
         return f"{self.receipt.receipt_number} -> {self.recipient_phone} ({self.status})"
+
+
+class ReceiptGenerationAttempt(UUIDBaseModel):
+    """
+    Audit and retry tracking for automatic receipt generation attempts.
+    Table: receipt_generation_attempts
+    """
+    contribution = models.ForeignKey(
+        Contribution,
+        on_delete=models.CASCADE,
+        related_name="receipt_generation_attempts"
+    )
+    attempt_number = models.IntegerField()
+    status = models.CharField(max_length=30)  # SUCCESS, FAILED
+    failure_reason = models.TextField(null=True, blank=True)
+    attempted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "receipt_generation_attempts"
+        verbose_name = "Receipt Generation Attempt"
+        verbose_name_plural = "Receipt Generation Attempts"
+        ordering = ["attempt_number"]
+
+    def __str__(self):
+        return f"Attempt #{self.attempt_number} for {self.contribution.contribution_number} [{self.status}]"

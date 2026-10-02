@@ -241,18 +241,22 @@
       <table class="header-table">
         <tr>
           <td class="logo-td">
-            <!-- Church Emblem Logo SVG -->
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="24" cy="24" r="22" fill="#011345" stroke="#FEC313" stroke-width="2"/>
-              <!-- Cross in Gold / Orange -->
-              <path d="M24 10V38" stroke="#FEC313" stroke-width="3.5" stroke-linecap="round"/>
-              <path d="M16 19H32" stroke="#FEC313" stroke-width="3.5" stroke-linecap="round"/>
-              <!-- Flame in Orange -->
-              <path d="M24 8C27 12 29 15 28 18C26.5 16 25 15.5 24 16C23 15.5 21.5 16 20 18C19 15 21 12 24 8Z" fill="#F16822"/>
-              <!-- Subtle Green Rays -->
-              <path d="M11 35L17 31" stroke="#4ECB4D" stroke-width="2" stroke-linecap="round"/>
-              <path d="M37 35L31 31" stroke="#4ECB4D" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+            {% if logo_base64 %}
+              <img src="{{ logo_base64 }}" width="54" height="54" alt="TCI HLC Logo" style="display: block; border-radius: 6px; object-fit: contain;">
+            {% else %}
+              <!-- Church Emblem Logo SVG Fallback -->
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="24" cy="24" r="22" fill="#011345" stroke="#FEC313" stroke-width="2"/>
+                <!-- Cross in Gold / Orange -->
+                <path d="M24 10V38" stroke="#FEC313" stroke-width="3.5" stroke-linecap="round"/>
+                <path d="M16 19H32" stroke="#FEC313" stroke-width="3.5" stroke-linecap="round"/>
+                <!-- Flame in Orange -->
+                <path d="M24 8C27 12 29 15 28 18C26.5 16 25 15.5 24 16C23 15.5 21.5 16 20 18C19 15 21 12 24 8Z" fill="#F16822"/>
+                <!-- Subtle Green Rays -->
+                <path d="M11 35L17 31" stroke="#4ECB4D" stroke-width="2" stroke-linecap="round"/>
+                <path d="M37 35L31 31" stroke="#4ECB4D" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            {% endif %}
           </td>
           <td>
             <div class="brand-title">TCI Higher Life Center</div>

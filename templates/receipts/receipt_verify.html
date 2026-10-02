@@ -11,6 +11,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="{% static 'img/tci_hlc-logo.png' %}">
+
   <style>
     body {
       background: #F8F9FA;
@@ -19,11 +22,33 @@
       flex-direction: column;
     }
     .verify-header {
-      background: #011345;
+      background: linear-gradient(180deg, #010E36 0%, #011345 100%);
       color: #ffffff;
-      padding: 24px 20px;
+      padding: 32px 20px 24px;
       text-align: center;
-      border-bottom: 4px solid #F16822;
+      position: relative;
+    }
+    .brand-stripe {
+      height: 4px;
+      background: linear-gradient(to right, #F16822 0%, #FEC313 50%, #4ECB4D 100%);
+      width: 100%;
+    }
+    .header-logo-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      padding: 6px;
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      border: 2px solid #F16822;
+      margin-bottom: 12px;
+    }
+    .header-logo-wrap img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      display: block;
     }
     .verify-container {
       max-width: 680px;
@@ -93,19 +118,20 @@
 <body>
   <!-- Header -->
   <header class="verify-header">
-    <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #51ACFD; margin-bottom: 4px;">
-      The Church of Jesus Christ Inc.
+    <div class="header-logo-wrap">
+      <img src="{% static 'img/tci_hlc-logo.png' %}" alt="TCI Higher Life Center Logo">
     </div>
-    <h1 style="font-size: 24px; font-weight: 700; margin: 0; color: #ffffff;">
+    <h1 style="font-size: 26px; font-weight: 700; margin: 0; color: #ffffff; letter-spacing: 0.5px;">
       TCI Higher Life Center
     </h1>
-    <div style="font-size: 12px; font-style: italic; color: #FEC313; margin-top: 4px;">
-      Jesus Saves, Heals & Satisfies
+    <div style="font-size: 13px; font-style: italic; color: #FEC313; margin-top: 5px; font-family: 'Libre Baskerville', serif;">
+      "Jesus Saves, Heals & Satisfies"
     </div>
-    <div style="font-size: 13px; color: #E4E7EC; margin-top: 8px;">
+    <div style="display: inline-block; background: rgba(81, 172, 253, 0.15); border: 1px solid rgba(81, 172, 253, 0.35); color: #51ACFD; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 14px; border-radius: 20px; margin-top: 12px; font-weight: 600;">
       Official Receipt Verification Registry
     </div>
   </header>
+  <div class="brand-stripe"></div>
 
   <!-- Container -->
   <main class="verify-container">
