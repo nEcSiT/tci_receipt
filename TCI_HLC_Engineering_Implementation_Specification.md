@@ -1421,6 +1421,61 @@ The milestone is complete when:
 
 ---
 
+# 25.4 FIFTH IMPLEMENTATION MILESTONE — MILESTONE 5
+
+**Milestone:** M5 — Receipt Management  
+**Status:** Completed — Full domain service layer, production WeasyPrint PDF generation and storage service, creator-only manual receipt modification with field-level audit trail, soft-deletion lifecycle, privacy-preserving public verification portal, cryptographically signed secure token access, and automated test suite implemented; 87 tests passing across M1, M2, M3, M4, and M5 (96 total test suite passes across all modules).  
+**Depends on:** M1 — Core Infrastructure & Data Model, M2 — Authentication & Authorization, M3 — Member Management & Contributor Identification, M4 — Contribution Management  
+**Objective:** Build and validate the complete Church Receipt Management module, enabling authorized System Users to generate, view, edit (creator-only), and soft-delete manual receipts; automatically issuing immutable receipts and SMS dispatches with tamper-proof download links for automatic contributions; enforcing contributor phone number privacy across all documents and verification channels; and establishing an append-only audit trail and public receipt verification.
+
+## Scope
+- **Included:**
+  - System-generated unique receipt number: `HLC-XXXXXXX` (strictly 7 digits after `HLC-`, collision-safe)
+  - One-to-one relationship between Contribution and Receipt; idempotent generation
+  - Automatic receipt properties: `generated_by_system = True`, `generated_by_display = "HLC/System"`, strictly immutable and cannot be deleted
+  - Manual receipt properties: `generated_by_user` recorded, creator-only manual editing enforced in service layer
+  - Field-level audit trail for manual edits via `ReceiptEdit` (`receipt_id`, `user_id`, `field_name`, `old_value`, `new_value`, `reason`, `created_at`) with mandatory non-empty reason
+  - Soft-deletion lifecycle: `soft_delete()` sets `status = DELETED`, records `deleted_at` and `deleted_by`, prevents physical deletion on instance and queryset levels
+  - Queryset visibility: default `objects` manager excludes soft-deleted receipts; `all_objects` retains full history for System Administrator review
+  - Contributor Phone Number Privacy Invariant: contributor phone numbers must NEVER appear in receipt HTML, PDF, or verification output
+  - PDF Generation and Storage: WeasyPrint HTML-to-PDF rendering conforming to official church branding and persisted in `StorageService` (`receipts/YYYY/MM/HLC-XXXXXXX.pdf`)
+  - Public Receipt Verification Portal (`/receipts/verify/<receipt_number>/`): validates active, soft-deleted (revoked), and non-existent receipts; displays confirmation without exposing phone numbers
+  - Cryptographically signed secure access tokens (`TimestampSigner`) for external SMS receipt downloads (`/receipts/access/<token>/`)
+  - Automatic SMS dispatch foundation (`ReceiptDeliveryRecord` and `Notification`) with graceful handling of missing or unverified phone numbers
+  - Receipt UI:
+    - Receipt directory (`/receipts/`) with KPI metrics, multi-criteria filtering (number, contributor, date, mode, type, source), and admin soft-deleted toggle
+    - Receipt detail view (`/receipts/<receipt_id>/`) with status badge, contributor card, financial ledger, edit history log, and SMS delivery tracking
+    - Manual receipt edit view (`/receipts/<receipt_id>/edit/`) with creator-only guard and mandatory reason
+    - PDF download and streaming view (`/receipts/<receipt_id>/pdf/`)
+    - Public verification view (`/receipts/verify/`)
+    - Cross-linkage in Contribution Detail (`/contributions/<contribution_id>/`)
+- **Excluded:**
+  - Live external payment-provider webhook integrations & polling daemons (Milestone 6)
+  - Requisitions & financial disbursements (Milestone 7)
+  - Financial reports and analytics exports (Milestone 8)
+
+## Acceptance Criteria & Test Scenarios
+- `M5-BT-001`: Receipt generation creates unique `HLC-XXXXXXX` (strictly 7 digits).
+- `M5-BT-002`: A contribution has at most one receipt; repeated generation returns existing record (idempotency).
+- `M5-BT-003`: Automatic contributions generate system receipts with `generated_by_system=True` and `"HLC/System"` display.
+- `M5-BT-004`: Automatic receipts are strictly immutable; attempts to modify fail validation.
+- `M5-BT-005`: Automatic receipts cannot be deleted by anyone, including the System Administrator.
+- `M5-BT-006`: Manual receipt edits are creator-only. Other users cannot edit even if permitted.
+- `M5-BT-007`: Manual edits require mandatory non-empty reason and record field-level `ReceiptEdit` entries and audit logs.
+- `M5-BT-008`: Manual receipts can be soft-deleted by their creator with `receipt.delete_own`.
+- `M5-BT-009`: Physical deletion of receipts is strictly prohibited on instance and queryset levels.
+- `M5-BT-010`: Active manager excludes soft-deleted receipts; `all_objects` includes them for administrator review.
+- `M5-BT-011`: Contributor phone numbers must NEVER appear in receipt HTML, PDF, or verification output.
+- `M5-BT-012`: PDF is generated and persisted in StorageService with valid `%PDF` header.
+- `M5-BT-013`: Public receipt verification validates active, soft-deleted, and non-existent receipts.
+- `M5-BT-014`: Secure token allows tamper-proof access for external SMS downloads.
+- `M5-BT-015`: Automatic receipt dispatches SMS notification; missing phone is handled gracefully without failing.
+- `M5-BT-016`: UI routes for list, detail, pdf export, edit, and public verify enforce permissions.
+- All Milestone 1, 2, 3, and 4 tests continue passing without regression.
+- Current project regression target: 87 automated tests (M1-M5), with 96 total automated test suite passing.
+
+---
+
 # 26. RECOMMENDED PROJECT STRUCTURE
 
 ```text
