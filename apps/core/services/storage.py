@@ -38,8 +38,11 @@ class LocalStorageService(StorageService):
     def _resolve_path(self, storage_key: str) -> Path:
         # Prevent directory traversal attacks
         clean_key = storage_key.lstrip("/\\")
-        path = (self.base_dir / clean_key).resolve()
-        if not str(path).startswith(str(self.base_dir.resolve())):
+        base_path = self.base_dir.resolve()
+        path = (base_path / clean_key).resolve()
+        try:
+            path.relative_to(base_path)
+        except ValueError:
             raise ValueError(f"Invalid storage path traversal attempted: {storage_key}")
         return path
 
