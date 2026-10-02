@@ -1613,3 +1613,18 @@ Implementation decisions already established include:
 The coding AI should treat these as the current implementation baseline.
 
 # END OF DOCUMENT
+
+
+## Security Addendum — Browser Session Isolation
+
+### Session Isolation Rule
+
+The application shall use the standard browser-session authentication model:
+
+- One browser session represents one authenticated System User at a time.
+- Multiple tabs within the same browser profile share that authenticated session.
+- Logging in as another user in another tab of the same browser profile changes the authenticated user for that shared browser session; existing tabs will reflect the new session on their next request.
+- The application shall not attempt to maintain different authenticated users independently per browser tab.
+- Users who need simultaneous access to different accounts should use separate browser profiles, private/incognito sessions, separate browsers, or separate devices.
+
+This is an intentional session-security and interoperability decision. Server-side authentication and permission checks remain authoritative for every request.
