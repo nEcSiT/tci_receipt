@@ -1,4 +1,7 @@
 import uuid
+import hashlib
+import hmac
+from django.conf import settings
 from decimal import Decimal
 from typing import Any, Dict, Optional
 from apps.contributions.providers.base import PaymentProvider, PaymentResult, PaymentStatus
@@ -98,6 +101,14 @@ class MockPaymentProvider(PaymentProvider):
             failure_reason=self._default_failure_reason,
             provider_data={"raw_status": self._default_status, "mock": True},
         )
+
+    def verify_webhook(self, raw_body: bytes, headers: Dict[str, str]) -> bool:
+        secret = getattr(settings, "PAYMENT_WEBHOOK_SECRET", "")
+        signature = headers.get("X-Webhook-Signature", "")
+        if not secret or not signature:
+            return False
+        expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)
 
     def verify_payment(self, reference: str) -> PaymentResult:
         if reference in self._canned_responses:
