@@ -1,4 +1,4 @@
-from django.apps import AppConfig
+agyfrom django.apps import AppConfig
 
 
 class AccountsConfig(AppConfig):
