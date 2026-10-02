@@ -436,11 +436,8 @@ class UserService:
         if not role:
             raise ValidationError("A valid active role created by the System Administrator is required.")
 
-        if role.name == Role.SYSTEM_ADMINISTRATOR:
-            raise ValidationError("A System User cannot create or assign the System Administrator role.")
-
-        if role.name == Role.SYSTEM_USER:
-            raise ValidationError("A System User cannot be assigned a protected system role.")
+        if role.name in {Role.SYSTEM_ADMINISTRATOR, Role.SYSTEM_USER}:
+            raise ValidationError("A System User cannot be assigned the System Administrator role or a protected system role.")
 
         if not creator.is_active or (not creator.is_system_administrator and not creator.has_permission("user.manage")):
             raise ValidationError("You do not have permission to manage system users.")

@@ -256,21 +256,42 @@
           <div style="font-size: 11px; color: var(--text-muted);">Exact server insertion timestamp</div>
         </div>
 
-        <!-- Receipt Status (M5 Linkage Boundary) -->
-        <div style="grid-column: span 2; background: var(--bg-surface); padding: 14px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
-          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">
-            Official Receipt Linkage (Milestone 5)
+        <!-- Receipt Status (Official Receipt Linkage) -->
+        <div style="grid-column: span 2; background: var(--bg-surface); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">
+            Official Receipt Linkage
           </div>
           {% if receipt %}
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
               <div>
-                Receipt Number: <code><strong>{{ receipt.receipt_number }}</strong></code>
-                <span class="badge badge-success" style="margin-left: 8px;">{{ receipt.status }}</span>
+                Receipt Number: <a href="{% url 'receipts:receipt_detail' receipt.id %}" style="font-size: 15px; font-weight: 700; color: var(--navy-dark); text-decoration: none;"><code><strong>{{ receipt.receipt_number }}</strong></code></a>
+                {% if receipt.status == 'ACTIVE' %}
+                  <span class="badge badge-success" style="margin-left: 8px;">Active</span>
+                {% else %}
+                  <span class="badge badge-danger" style="margin-left: 8px;">Deleted / Revoked</span>
+                {% endif %}
+                {% if receipt.generated_by_system %}
+                  <span class="badge badge-info" style="margin-left: 6px;">Automatic</span>
+                {% else %}
+                  <span class="badge badge-neutral" style="margin-left: 6px;">Manual</span>
+                {% endif %}
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <a href="{% url 'receipts:receipt_detail' receipt.id %}" class="btn btn-outline btn-sm">View Receipt</a>
+                <a href="{% url 'receipts:receipt_pdf' receipt.id %}" target="_blank" class="btn btn-primary btn-sm">Download PDF</a>
               </div>
             </div>
           {% else %}
-            <div style="font-size: 13px; color: var(--text-secondary);">
-              <em>No receipt generated yet. Official receipt generation, PDF compilation, and delivery belong to Milestone 5.</em>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div style="font-size: 13px; color: var(--text-secondary);">
+                <em>No receipt has been generated yet for this contribution.</em>
+              </div>
+              <form method="post" action="{% url 'receipts:receipt_generate' contribution.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Generate Official Receipt
+                </button>
+              </form>
             </div>
           {% endif %}
         </div>

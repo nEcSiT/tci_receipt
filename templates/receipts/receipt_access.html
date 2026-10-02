@@ -1,0 +1,198 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if is_valid %}Official Receipt {{ receipt.receipt_number }}{% else %}Receipt Access Link{% endif %} — TCI Higher Life Center</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="{% static 'img/tci_hlc-logo.png' %}">
+
+  <style>
+    body {
+      background: #F8F9FA;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .access-header {
+      background: linear-gradient(180deg, #010E36 0%, #011345 100%);
+      color: #ffffff;
+      padding: 32px 20px 24px;
+      text-align: center;
+      position: relative;
+    }
+    .brand-stripe {
+      height: 4px;
+      background: linear-gradient(to right, #F16822 0%, #FEC313 50%, #4ECB4D 100%);
+      width: 100%;
+    }
+    .access-logo {
+      width: 88px;
+      height: 88px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 14px auto;
+    }
+    .access-container {
+      max-width: 620px;
+      margin: 36px auto;
+      padding: 0 16px;
+      width: 100%;
+      flex: 1;
+    }
+    .access-card {
+      background: #ffffff;
+      border: 1px solid #E4E7EC;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      padding: 32px;
+    }
+    .amount-highlight {
+      background: linear-gradient(135deg, rgba(1, 19, 69, 0.05) 0%, rgba(241, 104, 34, 0.05) 100%);
+      border: 1px solid #D0D5DD;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #F2F4F7;
+      font-size: 14px;
+    }
+    .info-label {
+      color: #667085;
+      font-weight: 500;
+    }
+    .info-val {
+      font-weight: 700;
+      color: #011345;
+    }
+    .access-footer {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 13px;
+      color: #667085;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="access-header">
+    <img src="{% static 'img/tci_hlc-logo.png' %}" alt="TCI Higher Life Center Logo" class="access-logo">
+    <h1 style="font-size: 26px; font-weight: 700; margin: 0; color: #ffffff; letter-spacing: 0.5px;">
+      TCI Higher Life Center
+    </h1>
+    <div style="font-size: 13px; font-style: italic; color: #FEC313; margin-top: 5px; font-family: 'Libre Baskerville', serif;">
+      "Jesus Saves, Heals & Satisfies"
+    </div>
+    <div style="display: inline-block; background: rgba(81, 172, 253, 0.15); border: 1px solid rgba(81, 172, 253, 0.35); color: #51ACFD; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 14px; border-radius: 20px; margin-top: 12px; font-weight: 600;">
+      Official Secure Receipt Portal
+    </div>
+  </header>
+  <div class="brand-stripe"></div>
+
+  <!-- Content -->
+  <main class="access-container">
+    <div class="access-card">
+      {% if is_valid %}
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="display: inline-block; background: #4ECB4D; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 4px 12px; border-radius: 20px; margin-bottom: 8px;">
+            Official Church Receipt
+          </div>
+          <h2 style="font-size: 22px; font-weight: 700; color: #011345; margin: 0;">
+            Receipt {{ receipt.receipt_number }}
+          </h2>
+          <div style="font-size: 13px; color: #667085; margin-top: 4px;">
+            Thank you for your generous contribution and faithful stewardship.
+          </div>
+        </div>
+
+        <div class="amount-highlight">
+          <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #667085; font-weight: 600;">
+            Received Amount
+          </div>
+          <div style="font-size: 32px; font-weight: 700; color: #011345; margin-top: 4px;">
+            {{ receipt.contribution.currency }} {{ receipt.contribution.amount|floatformat:2 }}
+          </div>
+          <div style="font-size: 13px; color: #475467; margin-top: 4px;">
+            Category: <strong>{{ receipt.contribution.contribution_type.name }}</strong>
+            {% if receipt.contribution.custom_type_description %}
+              &bull; <em>{{ receipt.contribution.custom_type_description }}</em>
+            {% endif %}
+          </div>
+        </div>
+
+        <div style="margin-bottom: 24px;">
+          <div class="info-row">
+            <span class="info-label">Contributor</span>
+            <span class="info-val">{{ receipt.contributor_name }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Payment Mode</span>
+            <span class="info-val">{{ receipt.contribution.get_payment_mode_display }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Contribution Date</span>
+            <span class="info-val">{{ receipt.contribution.contribution_date|date:"F d, Y" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Issued At</span>
+            <span class="info-val">{{ receipt.generated_at|date:"M d, Y H:i" }} UTC</span>
+          </div>
+          {% if receipt.contribution.reference_number %}
+          <div class="info-row">
+            <span class="info-label">Reference #</span>
+            <span class="info-val"><code>{{ receipt.contribution.reference_number }}</code></span>
+          </div>
+          {% endif %}
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <a href="?download=1" class="btn btn-primary" style="height: 46px; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Official PDF Receipt
+          </a>
+
+          <a href="{% url 'receipts:receipt_verify_number' receipt.receipt_number %}" target="_blank" class="btn btn-outline" style="height: 42px; font-size: 14px; display: flex; align-items: center; justify-content: center;">
+            Verify Receipt Authenticity
+          </a>
+        </div>
+
+      {% else %}
+        <!-- Invalid or Expired Token -->
+        <div style="text-align: center; padding: 20px 0;">
+          <div style="color: #dc3545; margin-bottom: 16px;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h2 style="font-size: 20px; font-weight: 700; color: #011345; margin-bottom: 8px;">
+            Receipt Access Link Unavailable
+          </h2>
+          <p style="font-size: 14px; color: #667085; margin-bottom: 24px; line-height: 1.5;">
+            {{ error_message }}
+          </p>
+
+          <a href="{% url 'receipts:receipt_verify' %}" class="btn btn-primary">
+            Go to Public Verification Portal
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="access-footer">
+    <div>&copy; 2026 TCI Higher Life Center. Financial & Receipt Management System.</div>
+    <div style="font-size: 11px; margin-top: 4px; color: #98A2B3;">All official receipts are protected by cryptographic integrity checks.</div>
+  </footer>
+</body>
+</html>

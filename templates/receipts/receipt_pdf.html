@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt {{ receipt.receipt_number }} — TCI Higher Life Center</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 18mm 20mm;
+      @bottom-center {
+        content: "TCI Higher Life Center • Official Financial Record • Jesus Saves, Heals & Satisfies";
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 8pt;
+        color: #667085;
+      }
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #101828;
+      background: #ffffff;
+      font-size: 11pt;
+      line-height: 1.5;
+    }
+    
+    .receipt-container {
+      width: 100%;
+      border: 1px solid #D0D5DD;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    /* Header Bar */
+    .header-bar {
+      background-color: #011345;
+      color: #ffffff;
+      padding: 24px 30px;
+    }
+    
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .header-table td {
+      vertical-align: middle;
+    }
+    
+    .logo-td {
+      width: 65px;
+    }
+    
+    .brand-title {
+      font-size: 18pt;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+    }
+    
+    .brand-subtitle {
+      font-size: 9pt;
+      color: #51ACFD;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-top: 3px;
+    }
+    
+    .brand-motto {
+      font-size: 8.5pt;
+      color: #FEC313;
+      font-style: italic;
+      margin-top: 2px;
+    }
+    
+    .receipt-title-box {
+      text-align: right;
+    }
+    
+    .receipt-badge {
+      display: inline-block;
+      background-color: #F16822;
+      color: #ffffff;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    
+    .receipt-number {
+      font-size: 16pt;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #ffffff;
+    }
+    
+    /* Decorative stripe */
+    .brand-stripe {
+      height: 5px;
+      background: linear-gradient(to right, #F16822 0%, #FEC313 50%, #4ECB4D 100%);
+      width: 100%;
+    }
+    
+    /* Body */
+    .receipt-body {
+      padding: 28px 30px;
+    }
+    
+    .amount-highlight {
+      background: #F7F8FA;
+      border: 1px solid #D0D5DD;
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    
+    .amount-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .amount-label {
+      font-size: 9pt;
+      text-transform: uppercase;
+      color: #475467;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    
+    .amount-val {
+      font-size: 22pt;
+      font-weight: 700;
+      color: #011345;
+      margin-top: 4px;
+    }
+    
+    .amount-right {
+      text-align: right;
+      vertical-align: middle;
+    }
+    
+    .status-pill {
+      display: inline-block;
+      background-color: #EAF7EE;
+      color: #16803C;
+      font-size: 9pt;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 12px;
+      border: 1px solid #4ECB4D;
+    }
+    
+    .status-pill-deleted {
+      background-color: #FEECEB;
+      color: #B42318;
+      border: 1px solid #B42318;
+    }
+    
+    /* Fields Table */
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+    
+    .details-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #F1F3F6;
+      vertical-align: top;
+    }
+    
+    .field-label {
+      width: 32%;
+      font-size: 9.5pt;
+      font-weight: 600;
+      color: #475467;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    
+    .field-value {
+      font-size: 11pt;
+      font-weight: 500;
+      color: #101828;
+    }
+    
+    .field-value strong {
+      font-weight: 700;
+      color: #011345;
+    }
+    
+    /* Verification / Footer info */
+    .verification-box {
+      border-top: 1px dashed #D0D5DD;
+      padding-top: 20px;
+      margin-top: 20px;
+    }
+    
+    .thank-you-statement {
+      font-size: 11pt;
+      font-weight: 600;
+      color: #011345;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    
+    .scripture-statement {
+      font-size: 9.5pt;
+      font-style: italic;
+      color: #F16822;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    
+    .audit-meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8pt;
+      color: #667085;
+      margin-top: 16px;
+    }
+    
+    .audit-meta-table td {
+      padding: 3px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="receipt-container">
+    <!-- Header -->
+    <div class="header-bar">
+      <table class="header-table">
+        <tr>
+          <td class="logo-td">
+            {% if logo_base64 %}
+              <img src="{{ logo_base64 }}" width="56" height="56" alt="TCI HLC Logo" style="display: block; object-fit: contain;">
+            {% else %}
+              <!-- Church Emblem Logo SVG Fallback -->
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="24" cy="24" r="22" fill="#011345" stroke="#FEC313" stroke-width="2"/>
+                <!-- Cross in Gold / Orange -->
+                <path d="M24 10V38" stroke="#FEC313" stroke-width="3.5" stroke-linecap="round"/>
+                <path d="M16 19H32" stroke="#FEC313" stroke-width="3.5" stroke-linecap="round"/>
+                <!-- Flame in Orange -->
+                <path d="M24 8C27 12 29 15 28 18C26.5 16 25 15.5 24 16C23 15.5 21.5 16 20 18C19 15 21 12 24 8Z" fill="#F16822"/>
+                <!-- Subtle Green Rays -->
+                <path d="M11 35L17 31" stroke="#4ECB4D" stroke-width="2" stroke-linecap="round"/>
+                <path d="M37 35L31 31" stroke="#4ECB4D" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            {% endif %}
+          </td>
+          <td>
+            <div class="brand-title">TCI Higher Life Center</div>
+            <div class="brand-subtitle">Financial & Receipt Management System</div>
+            <div class="brand-motto">"Jesus Saves, Heals & Satisfies"</div>
+          </td>
+          <td class="receipt-title-box">
+            <div class="receipt-badge">Official Receipt</div>
+            <div class="receipt-number">{{ receipt.receipt_number }}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Decorative brand gradient stripe -->
+    <div class="brand-stripe"></div>
+
+    <!-- Body -->
+    <div class="receipt-body">
+      <!-- Amount Highlight -->
+      <div class="amount-highlight">
+        <table class="amount-table">
+          <tr>
+            <td>
+              <div class="amount-label">Amount Received</div>
+              <div class="amount-val">{{ receipt.contribution.currency }} {{ receipt.contribution.amount|floatformat:2 }}</div>
+            </td>
+            <td class="amount-right">
+              {% if receipt.is_deleted %}
+                <span class="status-pill status-pill-deleted">REVOKED / VOID</span>
+              {% else %}
+                <span class="status-pill">Official Verified Receipt</span>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Receipt Information Table -->
+      <table class="details-table">
+        <tr>
+          <td class="field-label">Contributor</td>
+          <td class="field-value">
+            <strong>{{ receipt.contributor_name }}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td class="field-label">Contribution Category</td>
+          <td class="field-value">
+            {{ receipt.contribution.contribution_type.name }}
+            {% if receipt.contribution.custom_type_description %}
+              <div style="font-size: 9.5pt; color: #475467; margin-top: 2px;">
+                Description: {{ receipt.contribution.custom_type_description }}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="field-label">Payment Mode</td>
+          <td class="field-value">{{ receipt.contribution.get_payment_mode_display }}</td>
+        </tr>
+        <tr>
+          <td class="field-label">Contribution Date</td>
+          <td class="field-value">{{ receipt.contribution.contribution_date|date:"F d, Y" }}</td>
+        </tr>
+        {% if receipt.contribution.reference_number %}
+        <tr>
+          <td class="field-label">Reference / Txn #</td>
+          <td class="field-value" style="font-family: monospace;">{{ receipt.contribution.reference_number }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td class="field-label">Generated By</td>
+          <td class="field-value">{{ receipt.generated_by_display }}</td>
+        </tr>
+        <tr>
+          <td class="field-label">Contribution ID</td>
+          <td class="field-value" style="font-family: monospace;">{{ receipt.contribution.contribution_number }}</td>
+        </tr>
+        <tr>
+          <td class="field-label">Date Generated</td>
+          <td class="field-value">{{ receipt.generated_at|date:"F d, Y H:i:s" }} UTC</td>
+        </tr>
+      </table>
+
+      <!-- Verification & Footer -->
+      <div class="verification-box">
+        <div class="thank-you-statement">
+          Thank you for your generous contribution and faithful kingdom stewardship.
+        </div>
+        <div class="scripture-statement">
+          "Raising disciples who disciple others" — TCI Higher Life Center
+        </div>
+
+        <table class="audit-meta-table">
+          <tr>
+            <td>
+              <strong>Verification:</strong> This receipt may be verified online using receipt number <strong>{{ receipt.receipt_number }}</strong>
+            </td>
+            <td style="text-align: right;">
+              Receipt Record ID: {{ receipt.id }}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

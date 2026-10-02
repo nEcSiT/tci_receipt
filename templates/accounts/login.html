@@ -12,14 +12,21 @@
   <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="{% static 'img/tci_hlc-logo.png' %}">
 </head>
 <body>
   <div class="auth-wrapper">
     <!-- Left Branded Navy Area (#011345) -->
     <div class="auth-brand-side">
       <div class="auth-brand-header">
-        <h1>TCI Higher Life Center</h1>
-        <div class="sidebar-sublogo" style="margin-top: 4px;">Financial & Receipt Management System</div>
+        <div style="text-align: center; display: flex; flex-direction: column; align-items: center; margin-bottom: 8px;">
+          <img src="{% static 'img/tci_hlc-logo.png' %}" alt="TCI Higher Life Center Logo" style="width: 104px; height: 104px; object-fit: contain; display: block; margin: 0 auto 16px auto;">
+          <div>
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-weight: 700; letter-spacing: 0.5px; text-align: center;">TCI Higher Life Center</h1>
+            <div class="sidebar-sublogo" style="margin-top: 6px; color: #FEC313; font-size: 12px; letter-spacing: 1px; text-align: center;">Financial & Receipt Management System</div>
+          </div>
+        </div>
       </div>
 
       <div class="auth-brand-statement">

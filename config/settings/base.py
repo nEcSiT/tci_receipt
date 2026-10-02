@@ -20,6 +20,9 @@ env = environ.Env(
     SYSTEM_ADMIN_RECOVERY_PHONE=(str, ""),
     STORAGE_BACKEND=(str, "local"),
     STORAGE_DIR=(str, str(BASE_DIR / "media")),
+    PAYMENT_PROVIDER_BACKEND=(str, "apps.contributions.providers.mock.MockPaymentProvider"),
+    SMS_PROVIDER_BACKEND=(str, "apps.notifications.providers.mock.MockSmsProvider"),
+    CHURCH_MERCHANT_NUMBERS=(list, ["HLC_MERCHANT", "0240000000", "0550000000"]),
 )
 
 env_file = BASE_DIR / ".env"
@@ -145,3 +148,10 @@ SYSTEM_ADMIN_RECOVERY_PHONE = env("SYSTEM_ADMIN_RECOVERY_PHONE")
 # Storage Configuration
 STORAGE_BACKEND = env("STORAGE_BACKEND")
 STORAGE_DIR = MEDIA_ROOT
+
+# Payment & SMS Provider Abstraction
+PAYMENT_PROVIDER_BACKEND = env("PAYMENT_PROVIDER_BACKEND")
+SMS_PROVIDER_BACKEND = env("SMS_PROVIDER_BACKEND")
+
+# Church Merchant Configuration
+CHURCH_MERCHANT_NUMBERS = env("CHURCH_MERCHANT_NUMBERS")
