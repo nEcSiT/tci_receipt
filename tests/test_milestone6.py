@@ -1,4 +1,7 @@
 import datetime
+import hashlib
+import hmac
+import json
 from decimal import Decimal
 import pytest
 from django.core.exceptions import ValidationError
@@ -668,6 +671,7 @@ def test_m6_bt_018_provider_abstraction_swappable(seed_data):
     assert isinstance(sms_provider, MockSmsProvider)
 
 
+@override_settings(PAYMENT_WEBHOOK_SECRET="test-webhook-secret")
 def test_m6_bt_019_api_and_ussd_gateway_endpoints(client, seed_data, member_with_phones):
     """
     Tests HTTP endpoints:
@@ -683,13 +687,18 @@ def test_m6_bt_019_api_and_ussd_gateway_endpoints(client, seed_data, member_with
         "type": "Tithe",
         "status": "SUCCESSFUL",
     }
-    response = client.post(webhook_url, data=webhook_payload, content_type="application/json")
+    raw_body = json.dumps(webhook_payload).encode("utf-8")
+    signature = hmac.new(b"test-webhook-secret", raw_body, hashlib.sha256).hexdigest()
+    response = client.post(webhook_url, data=raw_body, content_type="application/json", HTTP_X_WEBHOOK_SIGNATURE=signature)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "SUCCESSFUL"
     assert data["provider_reference"] == "WEBHOOK-REF-001"
     assert data["contribution_number"] is not None
     assert data["receipt_number"] is not None
+
+    unauth = client.post(webhook_url, data=raw_body, content_type="application/json")
+    assert unauth.status_code == 401
 
     # 2. USSD endpoint
     ussd_url = reverse("contributions:ussd_gateway")
@@ -733,3 +742,10 @@ def test_m6_bt_020_audit_and_traceability_chain(seed_data, member_with_phones):
     assert AuditLog.objects.filter(entity_type="Contribution", entity_id=contrib.id, action="AUTOMATIC_CONTRIBUTION_RECORDED").exists()
     assert AuditLog.objects.filter(entity_type="Receipt", entity_id=receipt.id, action="RECEIPT_GENERATION_SUCCESS").exists()
     assert AuditLog.objects.filter(entity_type="Notification", entity_id=notif.id, action="NOTIFICATION_SENT").exists()
+
+
+def test_m6_security_storage_path_traversal_blocked(tmp_path):
+    from apps.core.services.storage import LocalStorageService
+    storage = LocalStorageService(base_dir=tmp_path / "media")
+    with pytest.raises(ValueError):
+        storage.get("../outside.pdf")
