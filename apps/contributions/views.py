@@ -1,5 +1,7 @@
 import datetime
 import json
+import hashlib
+import hmac
 from decimal import Decimal
 from django.contrib import messages
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -8,6 +10,7 @@ from django.db.models import Sum, Q
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -326,6 +329,8 @@ class PaymentWebhookView(View):
             return JsonResponse({"error": f"Invalid payload: {str(e)}"}, status=400)
 
         provider = get_payment_provider()
+        if not provider.verify_webhook(request.body, {key: value for key, value in request.headers.items()}):
+            return JsonResponse({"error": "Webhook authentication failed."}, status=401)
         payment_result = provider.parse_webhook(payload)
 
         # Extract contribution type or default to General / Tithe
@@ -364,6 +369,13 @@ class UssdGatewayView(View):
     """
 
     def dispatch(self, request, *args, **kwargs):
+        if not settings.DEBUG:
+            secret = getattr(settings, "USSD_GATEWAY_SECRET", "")
+            signature = request.headers.get("X-USSD-Signature", "")
+            expected = hmac.new(secret.encode("utf-8"), request.body, hashlib.sha256).hexdigest() if secret else ""
+            if not secret or not signature or not hmac.compare_digest(signature, expected):
+                return JsonResponse({"error": "USSD gateway authentication failed."}, status=401)
+
         session_id = request.GET.get("sessionId") or request.POST.get("sessionId") or "session-demo"
         phone = request.GET.get("phoneNumber") or request.POST.get("phoneNumber") or "0240000001"
         text = request.GET.get("text") if "text" in request.GET else request.POST.get("text", "")

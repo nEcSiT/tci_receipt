@@ -8,7 +8,7 @@ sys.path.insert(0, str(BASE_DIR / "apps"))
 
 env = environ.Env(
     DEBUG=(bool, False),
-    SECRET_KEY=(str, "default-insecure-secret-key-change-me"),
+    SECRET_KEY=(str, ""),
     ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
     DATABASE_URL=(str, f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
     REDIS_URL=(str, "redis://localhost:6379/0"),
@@ -23,6 +23,9 @@ env = environ.Env(
     PAYMENT_PROVIDER_BACKEND=(str, "apps.contributions.providers.mock.MockPaymentProvider"),
     SMS_PROVIDER_BACKEND=(str, "apps.notifications.providers.mock.MockSmsProvider"),
     CHURCH_MERCHANT_NUMBERS=(list, ["HLC_MERCHANT", "0240000000", "0550000000"]),
+    PAYMENT_WEBHOOK_SECRET=(str, ""),
+    USSD_GATEWAY_SECRET=(str, ""),
+    RECEIPT_ACCESS_TOKEN_MAX_AGE=(int, 86400),
 )
 
 env_file = BASE_DIR / ".env"
@@ -30,6 +33,8 @@ if env_file.exists():
     environ.Env.read_env(str(env_file))
 
 SECRET_KEY = env("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be configured through deployment environment.")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 
@@ -155,3 +160,6 @@ SMS_PROVIDER_BACKEND = env("SMS_PROVIDER_BACKEND")
 
 # Church Merchant Configuration
 CHURCH_MERCHANT_NUMBERS = env("CHURCH_MERCHANT_NUMBERS")
+PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET")
+USSD_GATEWAY_SECRET = env("USSD_GATEWAY_SECRET")
+RECEIPT_ACCESS_TOKEN_MAX_AGE = env.int("RECEIPT_ACCESS_TOKEN_MAX_AGE", default=86400)

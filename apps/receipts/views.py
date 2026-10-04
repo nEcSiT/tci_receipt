@@ -7,6 +7,7 @@ from django.db.models import Sum, Q, Count
 from django.http import HttpResponse, Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.core.cache import cache
 from django.views import View
 
 from apps.accounts.models import Role
@@ -452,6 +453,15 @@ class ReceiptVerifyView(View):
         num = (receipt_number or request.GET.get("receipt_number", "")).strip()
         result = None
         if num:
+            client_key = request.META.get("REMOTE_ADDR", "unknown")
+            rate_key = f"receipt-verify:{client_key}"
+            attempts = cache.get(rate_key, 0)
+            if attempts >= 30:
+                return render(request, "receipts/receipt_verify.html", {
+                    "receipt_number": num,
+                    "result": {"is_valid": False, "status": "RATE_LIMITED", "message": "Too many verification attempts. Please try again later."},
+                }, status=429)
+            cache.set(rate_key, attempts + 1, 300)
             result = ReceiptService.verify_receipt(num)
 
         return render(

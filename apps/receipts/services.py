@@ -549,7 +549,7 @@ class ReceiptService:
         signer = TimestampSigner(salt=cls.TOKEN_SALT)
         try:
             # Valid for up to 90 days
-            receipt_id = signer.unsign(token, max_age=86400 * 90)
+            receipt_id = signer.unsign(token, max_age=getattr(settings, "RECEIPT_ACCESS_TOKEN_MAX_AGE", 86400))
             return Receipt.all_objects.filter(id=receipt_id).select_related(
                 "contribution__member",
                 "contribution__temporary_contributor",

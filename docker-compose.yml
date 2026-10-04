@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tci_user -d tci_hlc_finance"]
       interval: 5s
@@ -22,7 +22,7 @@ services:
     container_name: tci_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -43,8 +43,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DEBUG=True
-      - SECRET_KEY=docker-compose-secret-key-change-in-production
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY}
       - DATABASE_URL=postgres://tci_user:tci_password@postgres:5432/tci_hlc_finance
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -55,6 +55,8 @@ services:
       - SYSTEM_ADMIN_INITIAL_PASSWORD=${SYSTEM_ADMIN_INITIAL_PASSWORD}
       - SYSTEM_ADMIN_RECOVERY_EMAIL=${SYSTEM_ADMIN_RECOVERY_EMAIL}
       - SYSTEM_ADMIN_RECOVERY_PHONE=${SYSTEM_ADMIN_RECOVERY_PHONE}
+      - PAYMENT_WEBHOOK_SECRET=${PAYMENT_WEBHOOK_SECRET}
+      - RECEIPT_ACCESS_TOKEN_MAX_AGE=${RECEIPT_ACCESS_TOKEN_MAX_AGE:-86400}
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,8 +74,8 @@ services:
       - .:/app
       - media_data:/app/media
     environment:
-      - DEBUG=True
-      - SECRET_KEY=docker-compose-secret-key-change-in-production
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY}
       - DATABASE_URL=postgres://tci_user:tci_password@postgres:5432/tci_hlc_finance
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0

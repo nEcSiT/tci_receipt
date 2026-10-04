@@ -67,6 +67,11 @@ class PaymentProvider(ABC):
         pass
 
     @abstractmethod
+    def verify_webhook(self, raw_body: bytes, headers: Dict[str, str]) -> bool:
+        """Verifies that an inbound webhook was authenticated by the payment provider."""
+        pass
+
+    @abstractmethod
     def parse_webhook(self, payload: Dict[str, Any]) -> PaymentResult:
         """
         Parses provider webhook callback payload into normalized PaymentResult.
