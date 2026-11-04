@@ -1,0 +1,254 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Receipt — TCI Higher Life Center</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cabin:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/tci-hlc.css' %}">
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="{% static 'img/tci_hlc-logo.png' %}">
+
+  <style>
+    body {
+      background: #F8F9FA;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .verify-header {
+      background: linear-gradient(180deg, #010E36 0%, #011345 100%);
+      color: #ffffff;
+      padding: 32px 20px 24px;
+      text-align: center;
+      position: relative;
+    }
+    .brand-stripe {
+      height: 4px;
+      background: linear-gradient(to right, #F16822 0%, #FEC313 50%, #4ECB4D 100%);
+      width: 100%;
+    }
+    .verify-logo {
+      width: 88px;
+      height: 88px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 14px auto;
+    }
+    .verify-container {
+      max-width: 680px;
+      margin: 32px auto;
+      padding: 0 16px;
+      width: 100%;
+      flex: 1;
+    }
+    .verify-box {
+      background: #ffffff;
+      border: 1px solid #E4E7EC;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      padding: 28px;
+    }
+    .status-banner {
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-valid {
+      background: rgba(78, 203, 77, 0.12);
+      border: 1px solid rgba(78, 203, 77, 0.4);
+      color: #0d5e17;
+    }
+    .status-deleted {
+      background: rgba(220, 53, 69, 0.1);
+      border: 1px solid rgba(220, 53, 69, 0.3);
+      color: #721c24;
+    }
+    .status-notfound {
+      background: rgba(254, 195, 19, 0.15);
+      border: 1px solid rgba(254, 195, 19, 0.5);
+      color: #856404;
+    }
+    .receipt-detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #E4E7EC;
+      font-size: 14px;
+    }
+    .receipt-detail-item .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #667085;
+      font-weight: 600;
+    }
+    .receipt-detail-item .value {
+      font-weight: 700;
+      color: #011345;
+      margin-top: 3px;
+    }
+    .verify-footer {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 13px;
+      color: #667085;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="verify-header">
+    <img src="{% static 'img/tci_hlc-logo.png' %}" alt="TCI Higher Life Center Logo" class="verify-logo">
+    <h1 style="font-size: 26px; font-weight: 700; margin: 0; color: #ffffff; letter-spacing: 0.5px;">
+      TCI Higher Life Center
+    </h1>
+    <div style="font-size: 13px; font-style: italic; color: #FEC313; margin-top: 5px; font-family: 'Libre Baskerville', serif;">
+      "Jesus Saves, Heals & Satisfies"
+    </div>
+    <div style="display: inline-block; background: rgba(81, 172, 253, 0.15); border: 1px solid rgba(81, 172, 253, 0.35); color: #51ACFD; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 14px; border-radius: 20px; margin-top: 12px; font-weight: 600;">
+      Official Receipt Verification Registry
+    </div>
+  </header>
+  <div class="brand-stripe"></div>
+
+  <!-- Container -->
+  <main class="verify-container">
+    <div class="verify-box">
+      <h2 style="font-size: 20px; font-weight: 700; color: #011345; margin-bottom: 8px;">
+        Verify Official Church Receipt
+      </h2>
+      <p style="font-size: 14px; color: #475467; margin-bottom: 20px;">
+        Enter the unique 7-digit receipt number printed on your receipt (format: <code>HLC-XXXXXXX</code>) to confirm its authenticity.
+      </p>
+
+      <form method="get" action="{% url 'receipts:receipt_verify' %}" style="display: flex; gap: 10px;">
+        <input type="text" name="receipt_number" value="{{ receipt_number|default:'' }}" class="form-control" placeholder="e.g. HLC-5831047" style="height: 44px; font-size: 15px; font-weight: 600; letter-spacing: 1px;" required autofocus>
+        <button type="submit" class="btn btn-primary" style="height: 44px; padding: 0 24px; font-size: 14px; white-space: nowrap;">
+          Verify Receipt
+        </button>
+      </form>
+
+      {% if result %}
+        {% if result.is_valid %}
+          <!-- Valid Receipt -->
+          <div class="status-banner status-valid">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <div>
+              <div style="font-weight: 700; font-size: 15px;">Official Receipt Verified: VALID</div>
+              <div style="font-size: 13px; margin-top: 2px;">{{ result.message }}</div>
+            </div>
+          </div>
+
+          <div class="receipt-detail-grid">
+            <div class="receipt-detail-item">
+              <div class="label">Receipt Number</div>
+              <div class="value"><code>{{ result.receipt_number }}</code></div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Contributor Name</div>
+              <div class="value">{{ result.contributor_name }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Verified Amount</div>
+              <div class="value" style="font-size: 18px; color: #011345;">
+                {{ result.currency }} {{ result.amount|floatformat:2 }}
+              </div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Contribution Category</div>
+              <div class="value">{{ result.contribution_type }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Payment Mode</div>
+              <div class="value">{{ result.payment_mode }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Contribution Date</div>
+              <div class="value">{{ result.contribution_date|date:"F d, Y" }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Issued By</div>
+              <div class="value">{{ result.generated_by }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Timestamp</div>
+              <div class="value">{{ result.generated_at|date:"M d, Y H:i" }} UTC</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 20px; padding: 12px 14px; background: #F8F9FA; border-radius: 6px; font-size: 12px; color: #475467; text-align: center;">
+            Contributor contact details are kept strictly confidential and never displayed on public verification records.
+          </div>
+
+        {% elif result.status == 'DELETED' %}
+          <!-- Soft-Deleted Receipt -->
+          <div class="status-banner status-deleted">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <div>
+              <div style="font-weight: 700; font-size: 15px;">Receipt Status: REVOKED / DELETED</div>
+              <div style="font-size: 13px; margin-top: 2px;">{{ result.message }}</div>
+            </div>
+          </div>
+
+          <div class="receipt-detail-grid">
+            <div class="receipt-detail-item">
+              <div class="label">Receipt Number</div>
+              <div class="value"><code>{{ result.receipt_number }}</code></div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Contributor Name</div>
+              <div class="value">{{ result.contributor_name }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Original Category</div>
+              <div class="value">{{ result.contribution_type }}</div>
+            </div>
+            <div class="receipt-detail-item">
+              <div class="label">Original Date</div>
+              <div class="value">{{ result.contribution_date|date:"F d, Y" }}</div>
+            </div>
+          </div>
+
+        {% else %}
+          <!-- Not Found -->
+          <div class="status-banner status-notfound">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div>
+              <div style="font-weight: 700; font-size: 15px;">Receipt Record Not Found</div>
+              <div style="font-size: 13px; margin-top: 2px;">{{ result.message }}</div>
+            </div>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      <div style="margin-top: 24px; text-align: center; border-top: 1px solid #E4E7EC; padding-top: 16px;">
+        {% if user.is_authenticated %}
+        <a href="{% url 'receipts:receipt_list' %}" style="font-size: 13px; color: #011345; font-weight: 600; text-decoration: none;">
+          &larr; Back to Internal Receipts Registry
+        </a>
+        {% else %}
+        <a href="{% url 'login' %}" style="font-size: 13px; color: #011345; font-weight: 600; text-decoration: none;">
+          Staff / Administrative Sign In &rarr;
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="verify-footer">
+    <div>&copy; 2026 TCI Higher Life Center. Official Financial Registry.</div>
+    <div style="font-size: 11px; margin-top: 4px; color: #98A2B3;">All rights reserved &bull; Financial integrity and stewardship</div>
+  </footer>
+</body>
+</html>

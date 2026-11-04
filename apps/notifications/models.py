@@ -15,6 +15,7 @@ class NotificationType(models.TextChoices):
     EVIDENCE_REJECTED = "EVIDENCE_REJECTED", "Evidence Rejected"
     RECEIPT_GENERATION_FAILED = "RECEIPT_GENERATION_FAILED", "Receipt Generation Failed"
     THANK_YOU_FAILED = "THANK_YOU_FAILED", "Thank You Failed"
+    FAILED_NOTIFICATION = "FAILED_NOTIFICATION", "Failed Notification"
     MERCHANT_TRANSACTION = "MERCHANT_TRANSACTION", "Merchant Transaction"
     DUPLICATE_TRANSACTION = "DUPLICATE_TRANSACTION", "Duplicate Transaction"
     OTHER = "OTHER", "Other"
@@ -26,6 +27,7 @@ class NotificationStatus(models.TextChoices):
     SENT = "SENT", "Sent"
     DELIVERED = "DELIVERED", "Delivered"
     FAILED = "FAILED", "Failed"
+    RETRYING = "RETRYING", "Retrying"
     MANUAL_ACTION_REQUIRED = "MANUAL_ACTION_REQUIRED", "Manual Action Required"
 
 
@@ -101,8 +103,8 @@ class Notification(UUIDBaseModel):
     notification_type = models.CharField(max_length=50, choices=NotificationType.choices)
     recipient_name = models.CharField(max_length=200, null=True, blank=True)
     recipient_phone = models.CharField(max_length=30, db_index=True)
-    related_record_type = models.CharField(max_length=100)
-    related_record_id = models.UUIDField()
+    related_record_type = models.CharField(max_length=100, null=True, blank=True)
+    related_record_id = models.UUIDField(null=True, blank=True)
     channel = models.CharField(max_length=20, default="SMS")
     template = models.ForeignKey(
         NotificationTemplate,
@@ -120,6 +122,9 @@ class Notification(UUIDBaseModel):
     )
     sent_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
+    attempt_count = models.IntegerField(default=0)
+    provider_reference = models.CharField(max_length=200, null=True, blank=True)
+    failure_reason = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = "notifications"
@@ -161,8 +166,8 @@ class ManualAction(UUIDBaseModel):
     Table: manual_actions
     """
     action_type = models.CharField(max_length=100, choices=ManualActionType.choices)
-    related_record_type = models.CharField(max_length=100)
-    related_record_id = models.UUIDField()
+    related_record_type = models.CharField(max_length=100, null=True, blank=True)
+    related_record_id = models.UUIDField(null=True, blank=True)
     description = models.TextField()
     attempt_count = models.IntegerField(default=0)
     priority = models.CharField(max_length=20, choices=ManualActionPriority.choices, default=ManualActionPriority.MEDIUM)

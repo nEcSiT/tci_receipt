@@ -249,7 +249,7 @@ def test_m2_bt_012_immutable_audit_logging(seed_data, system_admin):
 
 def test_m2_bt_013_system_user_cannot_create_system_administrator(seed_data, system_user):
     """M2-BT-013: System User cannot create or assign the System Administrator role."""
-    with pytest.raises(ValidationError, match="System Administrator role"):
+    with pytest.raises(ValidationError, match="protected system role"):
         UserService.create_system_user(
             creator=system_user,
             email="attempted.admin@tcihlc.org",
@@ -259,6 +259,7 @@ def test_m2_bt_013_system_user_cannot_create_system_administrator(seed_data, sys
             initial_password="SecurePassword123!",
         )
 
+    assert not User.objects.filter(email="attempted.admin@tcihlc.org").exists()
 
 def test_m2_bt_014_user_management_is_enforced_in_service_layer(seed_data, system_user, system_admin):
     """M2-BT-014: User management cannot be bypassed by calling services directly."""
