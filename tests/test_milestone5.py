@@ -418,7 +418,7 @@ def test_m5_bt_015_automatic_sms_dispatch_and_missing_phone_graceful_handling(au
     receipt = ReceiptService.generate_receipt(auto_contribution, is_system=True)
     delivery = ReceiptDeliveryRecord.objects.filter(receipt=receipt).first()
     assert delivery is not None
-    assert delivery.status == "SENT"
+    assert delivery.status == "DELIVERED"  # Mock provider confirms delivery
     assert delivery.recipient_phone == "+233241112233"
     assert Notification.objects.filter(related_record_id=receipt.id, notification_type=NotificationType.RECEIPT).exists()
 

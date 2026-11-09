@@ -42,6 +42,11 @@ class NotificationListView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
+        if not request.user.is_active or not (
+            request.user.is_system_administrator
+            or request.user.has_permission("notification.view")
+        ):
+            raise PermissionDenied("You do not have permission to view notification history.")
         qs = Notification.objects.order_by("-created_at")
 
         query = request.GET.get("q", "").strip()

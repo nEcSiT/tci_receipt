@@ -46,6 +46,7 @@ class Command(BaseCommand):
             ("evidence.verify", "Verify Evidence", "Review and verify post-disbursement evidence"),
             ("report.view", "View Reports", "Access financial and administrative reports"),
             ("report.export", "Export Reports", "Download CSV, Excel, or PDF reports"),
+            ("notification.view", "View Notifications", "View system-wide SMS delivery history"),
             ("template.manage", "Manage SMS Templates", "Create, edit, activate and deactivate SMS notification templates"),
             ("user.manage", "Manage Users", "Create and deactivate internal system users"),
             ("audit.view", "View Audit Logs", "Inspect immutable system audit trails"),
@@ -176,13 +177,15 @@ class Command(BaseCommand):
         ]
 
         for name, n_type, c_type, body in templates_data:
-            NotificationTemplate.objects.update_or_create(
+            NotificationTemplate.objects.get_or_create(
                 name=name,
                 defaults={
                     "notification_type": n_type,
                     "contribution_type": c_type,
                     "template_body": body,
-                    "is_active": True,
+                    "is_active": not NotificationTemplate.objects.filter(
+                        notification_type=n_type, contribution_type=c_type, is_active=True
+                    ).exists(),
                     "created_by": admin_user,
                 }
             )

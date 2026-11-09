@@ -10,8 +10,11 @@ def test_notification_list_view(client, system_user):
     response = client.get(url)
     assert response.status_code == 302
 
-    # Authenticated user can view notifications
+    # Authentication alone does not grant access to notification history
     client.force_login(system_user)
+    assert client.get(url).status_code == 403
+    role = system_user.user_roles.first().role
+    RolePermission.objects.create(role=role, permission=Permission.objects.get(code="notification.view"))
     Notification.objects.create(
         notification_type=NotificationType.THANK_YOU,
         recipient_phone="+233200000002",

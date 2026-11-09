@@ -4,6 +4,10 @@ M7 is **not complete**. This branch implements requester drafts/supporting files
 submission, staff queue/locking, and approval/rejection. Reassignment, payouts,
 expenditure evidence, verification and closure await the decisions below.
 
+The earlier commit title claiming a complete M7 workflow is inaccurate. Assignment
+is by Start Working, not round-robin; payouts and evidence closure are not implemented.
+The retry mechanism is a management command requiring a scheduler, not deployed Celery jobs.
+
 ## Baseline and preservation
 
 Inspected branch: `feature-branch`, clean, four commits ahead of its fetched remote.
@@ -154,3 +158,18 @@ cannot be claimed: that workflow is not implemented.
 `python manage.py check` and `python manage.py makemigrations --check --dry-run` pass.
 Migrations: requisitions 0002 (nullable drafts/access metadata), 0003 (current assignment
 constraint), audit 0002 (explicit requester actor). Existing identifiers are never rewritten.
+
+## SMS review corrections
+
+Receipt SMS now uses the configured receipt template and SMS provider. Provider
+acceptance is recorded as SENT; only a DELIVERED result sets delivered_at. Gateway
+exceptions are recorded as failed attempts, and retries synchronize receipt history.
+The configured provider remains the existing development mock unless explicitly changed;
+these fixes do not install or configure a live SMS gateway.
+
+Notification history now requires administrator access or the notification.view
+permission. Run `python manage.py seed_db` to register that permission, then grant it
+only to roles authorized to inspect system-wide SMS history. Template management
+permission alone does not grant history access. Seeding preserves existing template
+wording and activation settings and does not activate a default over a custom template.
+Malformed placeholder braces produce a form error rather than a server error.

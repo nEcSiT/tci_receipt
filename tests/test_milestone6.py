@@ -167,7 +167,7 @@ def test_m6_bt_001_successful_automatic_payment_end_to_end(seed_data, member_wit
     assert "/receipts/access/" in notification.message
 
     # Verify SMS was dispatched via provider
-    assert len(setup_mock_sms.sent_messages) == 1
+    assert len(setup_mock_sms.sent_messages) == 2  # Receipt and thank-you SMS
     assert setup_mock_sms.sent_messages[0]["recipient_phone"] == "0241234567"
 
 

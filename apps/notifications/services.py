@@ -24,6 +24,7 @@ from apps.notifications.models import (
     NotificationType,
 )
 from apps.notifications.providers.factory import get_sms_provider
+from apps.notifications.providers.base import SmsResult
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,11 @@ class NotificationTemplateService:
 
         formatter = string.Formatter()
         placeholders = set()
-        for _, field_name, format_spec, conversion in formatter.parse(template_body):
+        try:
+            parsed = list(formatter.parse(template_body))
+        except ValueError as exc:
+            raise ValidationError("Invalid placeholder syntax: check opening and closing braces.") from exc
+        for _, field_name, format_spec, conversion in parsed:
             if field_name is not None:
                 if format_spec or conversion:
                     raise ValidationError(
@@ -422,7 +427,10 @@ class NotificationService:
         # 3. Dispatch to SMS Provider
         provider = get_sms_provider()
         attempt_number = 1
-        sms_result = provider.send_sms(recipient_phone=recipient_phone, message=message)
+        try:
+            sms_result = provider.send_sms(recipient_phone=recipient_phone, message=message)
+        except Exception as exc:
+            sms_result = SmsResult(success=False, status="FAILED", failure_reason=str(exc))
 
         # 4. Record Attempt Log
         NotificationAttempt.objects.create(
@@ -438,9 +446,10 @@ class NotificationService:
         # 5. Transition final state based on result
         now = timezone.now()
         if sms_result.success:
-            notification.status = NotificationStatus.DELIVERED
+            notification.status = (NotificationStatus.DELIVERED if sms_result.status == "DELIVERED"
+                                   else NotificationStatus.SENT)
             notification.sent_at = now
-            notification.delivered_at = now
+            notification.delivered_at = now if notification.status == NotificationStatus.DELIVERED else None
             notification.attempt_count = attempt_number
             notification.provider_reference = sms_result.provider_reference
             notification.failure_reason = None
@@ -531,10 +540,13 @@ class NotificationRetryService:
 
         next_attempt_number = notification.attempt_count + 1
         provider = get_sms_provider()
-        sms_result = provider.send_sms(
-            recipient_phone=notification.recipient_phone,
-            message=notification.message,
-        )
+        try:
+            sms_result = provider.send_sms(
+                recipient_phone=notification.recipient_phone,
+                message=notification.message,
+            )
+        except Exception as exc:
+            sms_result = SmsResult(success=False, status="FAILED", failure_reason=str(exc))
 
         NotificationAttempt.objects.create(
             notification=notification,
@@ -548,9 +560,10 @@ class NotificationRetryService:
 
         now = timezone.now()
         if sms_result.success:
-            notification.status = NotificationStatus.DELIVERED
+            notification.status = (NotificationStatus.DELIVERED if sms_result.status == "DELIVERED"
+                                   else NotificationStatus.SENT)
             notification.sent_at = notification.sent_at or now
-            notification.delivered_at = now
+            notification.delivered_at = now if notification.status == NotificationStatus.DELIVERED else None
             notification.attempt_count = next_attempt_number
             notification.provider_reference = sms_result.provider_reference
             notification.failure_reason = None
@@ -566,7 +579,7 @@ class NotificationRetryService:
                 user=actor,
                 new_values={
                     "attempt_number": next_attempt_number,
-                    "status": NotificationStatus.DELIVERED,
+                    "status": notification.status,
                     "provider_reference": sms_result.provider_reference,
                 },
                 result=AuditResult.SUCCESS,
@@ -594,6 +607,24 @@ class NotificationRetryService:
                     result=AuditResult.FAILURE,
                 )
 
+        # Keep receipt history consistent with retries of its persisted SMS.
+        if notification.related_record_type == "Receipt":
+            from apps.receipts.models import ReceiptDeliveryRecord
+            delivery = ReceiptDeliveryRecord.objects.filter(
+                receipt_id=notification.related_record_id,
+                recipient_phone=notification.recipient_phone,
+            ).order_by("-created_at").first()
+            if delivery:
+                delivery.status = notification.status
+                delivery.provider_reference = notification.provider_reference
+                delivery.attempt_count = notification.attempt_count
+                delivery.last_attempt_at = now
+                delivery.delivered_at = notification.delivered_at
+                delivery.failure_reason = notification.failure_reason
+                delivery.save(update_fields=[
+                    "status", "provider_reference", "attempt_count", "last_attempt_at",
+                    "delivered_at", "failure_reason", "updated_at",
+                ])
         return notification
 
     @classmethod

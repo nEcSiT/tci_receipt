@@ -130,41 +130,43 @@ class ReceiptDeliveryService:
             return delivery
 
         try:
-            # Construct SMS message body
-            c_type = receipt.contribution.contribution_type.name
-            amount_str = f"{receipt.contribution.currency} {receipt.contribution.amount:.2f}"
-            c_date = receipt.contribution.contribution_date.strftime("%d %b %Y")
-            message = (
-                f"TCI Higher Life Center: Received with thanks your {c_type} of {amount_str} on {c_date}. "
-                f"Receipt: {receipt.receipt_number}. View receipt: {secure_link}. "
-                f"Jesus Saves, Heals & Satisfies."
-            )
+            from apps.notifications.services import NotificationService, NotificationTemplateService
+            from apps.core.utils.phone import extract_first_name_from_provider_name
 
-            # Create Delivery Record
-            delivery = ReceiptDeliveryRecord.objects.create(
-                receipt=receipt,
-                recipient_phone=phone,
-                channel="SMS",
-                status="SENT",
+            contribution = receipt.contribution
+            provider_name = (contribution.payment_transaction.provider_name
+                             if contribution.payment_transaction else None)
+            first_name = (contribution.member.first_name if contribution.member
+                          else extract_first_name_from_provider_name(provider_name))
+            message, template = NotificationTemplateService.build_receipt_message(
+                first_name=first_name,
+                amount=contribution.amount,
+                currency=contribution.currency,
+                contribution_type_name=contribution.contribution_type.name,
+                receipt_number=receipt.receipt_number,
+                date_str=contribution.contribution_date.strftime("%d %b %Y"),
                 secure_link=secure_link,
-                provider_reference=f"SMS-{receipt.receipt_number}",
-                attempt_count=1,
-                last_attempt_at=timezone.now(),
-                delivered_at=timezone.now(),
             )
-
-            # Also create corresponding Notification entry for cross-system tracking
-            Notification.objects.create(
+            notification = NotificationService.create_and_send_notification(
                 notification_type=NotificationType.RECEIPT,
                 recipient_name=receipt.contributor_name,
                 recipient_phone=phone,
                 related_record_type="Receipt",
                 related_record_id=receipt.id,
-                channel="SMS",
                 message=message,
-                status=NotificationStatus.SENT,
-                sent_at=timezone.now(),
-                delivered_at=timezone.now(),
+                template=template,
+            )
+            delivery = ReceiptDeliveryRecord.objects.create(
+                receipt=receipt,
+                recipient_phone=phone,
+                channel="SMS",
+                status=notification.status,
+                secure_link=secure_link,
+                provider_reference=notification.provider_reference,
+                attempt_count=notification.attempt_count,
+                last_attempt_at=timezone.now(),
+                delivered_at=notification.delivered_at,
+                failure_reason=notification.failure_reason,
             )
 
             logger.info("Automatic receipt %s dispatched to %s", receipt.receipt_number, phone)
