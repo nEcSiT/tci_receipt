@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.audit.models import AuditResult
 from apps.audit.services import AuditService
+from apps.core.utils.phone import get_phone_lookup_variants
 from apps.contributions.models import Contribution
 from apps.members.models import (
     Member,
@@ -373,19 +374,21 @@ class ContributorIdentificationService:
         if not clean_phone:
             raise ValidationError("A transaction phone number is required for contributor identification.")
 
-        # 1. Search active member phones
+        variants = get_phone_lookup_variants(clean_phone)
+
+        # 1. Search active member phones using normalized equivalent variants
         active_phone = MemberPhoneNumber.objects.filter(
-            phone_number=clean_phone,
+            phone_number__in=variants,
             is_active=True,
         ).select_related("member").first()
 
         if active_phone:
-            # Member match found
+            # Member match found strictly by phone number (never by provider name)
             return active_phone.member, None
 
         # 2. No active member match: Look up or create Temporary Contributor
         tc = TemporaryContributor.objects.filter(
-            phone_number=clean_phone,
+            phone_number__in=variants,
             status__in=[
                 TemporaryContributorStatus.UNVERIFIED,
                 TemporaryContributorStatus.UNDER_REVIEW,
@@ -400,6 +403,9 @@ class ContributorIdentificationService:
                 provider_account_reference=provider_account_reference.strip() if provider_account_reference else None,
                 status=TemporaryContributorStatus.UNVERIFIED,
             )
+        elif provider_name and not tc.provider_name:
+            tc.provider_name = provider_name.strip()
+            tc.save(update_fields=["provider_name", "updated_at"])
 
         return None, tc
 

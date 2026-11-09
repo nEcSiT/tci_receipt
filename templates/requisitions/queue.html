@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Requisitions{% endblock %}
+{% block page_title %}Requisitions{% endblock %}
+{% block extra_head %}<style>.requisition-filters{display:flex;flex-wrap:wrap;gap:1rem;align-items:end;margin:1rem 0}.requisition-filters label{display:flex;flex-direction:column;gap:.25rem}</style>{% endblock %}
+{% block content %}
+<h1>Requisitions</h1>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+<form method="get" class="requisition-filters">
+<label>Search <input name="q" value="{{ request.GET.q }}" placeholder="Reference, purpose or ministry"></label>
+<label>Status <select name="status"><option value="">All</option>{% for value,label in statuses %}<option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>Work <select name="work"><option value="">All</option><option value="mine" {% if request.GET.work == 'mine' %}selected{% endif %}>My work</option><option value="unassigned" {% if request.GET.work == 'unassigned' %}selected{% endif %}>Unassigned</option></select></label>
+<label>Submitted from <input type="date" name="from" value="{{ request.GET.from }}"></label>
+<label>To <input type="date" name="to" value="{{ request.GET.to }}"></label><button class="btn btn-primary">Filter</button></form>
+<div style="overflow-x:auto"><table class="table"><thead><tr><th>Reference</th><th>Purpose / organization</th><th>Requested</th><th>Needed</th><th>Submitted</th><th>Status</th><th>Handler</th></tr></thead><tbody>
+{% for item in page %}{% with assignment=item.current_assignment %}<tr>
+<td>{% if not assignment or assignment.assigned_to_id == user.id %}<a href="{% url 'requisitions:detail' item.id %}">{{ item.requisition_number }}</a>{% else %}{{ item.requisition_number }} (locked){% endif %}</td>
+<td>{{ item.purpose }}<br>{{ item.ministry|default:'' }} {{ item.team|default:'' }} {{ item.department|default:'' }} {{ item.group_name|default:'' }}</td>
+<td>GHS {{ item.amount_requested }}</td><td>{{ item.date_funds_needed|default:'—' }}</td><td>{{ item.submitted_at|default:'—' }}</td><td>{{ item.get_status_display }}</td><td>{{ assignment.assigned_to.full_name|default:'Unassigned' }}</td>
+</tr>{% endwith %}{% empty %}<tr><td colspan="7">No matching requisitions.</td></tr>{% endfor %}</tbody></table></div>
+<p>Page {{ page.number }} of {{ page.paginator.num_pages }}</p>
+{% if page.has_previous %}<a href="{% querystring page=page.previous_page_number %}">Previous</a>{% endif %}
+{% if page.has_next %}<a href="{% querystring page=page.next_page_number %}">Next</a>{% endif %}
+{% endblock %}

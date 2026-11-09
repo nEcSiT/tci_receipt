@@ -1,6 +1,10 @@
 import logging
+import re
+import string
+import uuid
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -24,49 +28,147 @@ from apps.notifications.providers.factory import get_sms_provider
 logger = logging.getLogger(__name__)
 
 
-class SafeDict(dict):
-    """Safely returns missing keys formatted as {key} instead of raising KeyError."""
-    def __missing__(self, key: str) -> str:
-        return f"{{{key}}}"
+ALLOWED_PLACEHOLDERS: Set[str] = {
+    "first_name",
+    "amount",
+    "currency",
+    "contribution_type",
+    "receipt_number",
+    "date",
+    "secure_link",
+}
 
 
 class NotificationTemplateService:
     """
-    Manages configurable notification templates supporting variable substitution:
+    Manages configurable notification templates supporting approved variable substitutions:
     {first_name}, {amount}, {currency}, {contribution_type}, {receipt_number}, {date}, {secure_link}.
+    Enforces validation of placeholders and rejects unsupported ones with clear errors.
     """
+
+    ALLOWED_PLACEHOLDERS = ALLOWED_PLACEHOLDERS
+
+    @classmethod
+    def extract_placeholders(cls, template_body: str) -> Set[str]:
+        """Extracts all variable placeholder names enclosed in braces."""
+        if not template_body:
+            return set()
+        formatter = string.Formatter()
+        placeholders = set()
+        for _, field_name, _, _ in formatter.parse(template_body):
+            if field_name is not None:
+                placeholders.add(field_name)
+        return placeholders
+
+    @classmethod
+    def validate_template_body(cls, template_body: str) -> Set[str]:
+        """
+        Validates template placeholders.
+        Rejects unsupported placeholders, format specifiers, conversion flags,
+        and attribute/item lookups with a clear, user-facing ValidationError.
+        """
+        if not template_body or not template_body.strip():
+            raise ValidationError("Template wording cannot be blank.")
+
+        formatter = string.Formatter()
+        placeholders = set()
+        for _, field_name, format_spec, conversion in formatter.parse(template_body):
+            if field_name is not None:
+                if format_spec or conversion:
+                    raise ValidationError(
+                        f"Format specifiers and conversion modifiers are not allowed in template placeholders (found {{{field_name}}})."
+                    )
+                if "." in field_name or "[" in field_name:
+                    raise ValidationError(
+                        f"Attribute and index lookups are not allowed in template placeholders (found {{{field_name}}})."
+                    )
+                placeholders.add(field_name)
+
+        unsupported = sorted(placeholders - cls.ALLOWED_PLACEHOLDERS)
+        if unsupported:
+            unsupported_formatted = ", ".join([f"{{{p}}}" for p in unsupported])
+            allowed_formatted = ", ".join([f"{{{p}}}" for p in sorted(cls.ALLOWED_PLACEHOLDERS)])
+            raise ValidationError(
+                f"Unsupported placeholder(s): {unsupported_formatted}. "
+                f"Allowed placeholders are: {allowed_formatted}."
+            )
+        return placeholders
 
     @classmethod
     def render_template(cls, template_body: str, context: Dict[str, Any]) -> str:
-        safe_ctx = SafeDict()
+        """
+        Renders the template with the provided context dictionary.
+        Validates that all placeholders in the template are allowed and that no
+        unresolved placeholders remain in the output message.
+        """
+        cls.validate_template_body(template_body)
+        placeholders = cls.extract_placeholders(template_body)
+
+        mapped_ctx = {}
+        for p in placeholders:
+            val = context.get(p)
+            mapped_ctx[p] = "" if val is None else str(val)
+
+        # Also supply any additional context items (e.g. currency if provided)
         for k, v in context.items():
-            safe_ctx[k] = "" if v is None else str(v)
-        return template_body.format_map(safe_ctx)
+            if k not in mapped_ctx and v is not None:
+                mapped_ctx[k] = str(v)
+
+        rendered = template_body.format_map(mapped_ctx)
+
+        # Check for unresolved placeholders (e.g. misspelled or empty braces)
+        unresolved = re.findall(r"\{([a-zA-Z0-9_]+)\}", rendered)
+        if unresolved:
+            raise ValidationError(
+                f"Rendered SMS contains unresolved placeholder(s): {', '.join([f'{{{p}}}' for p in unresolved])}"
+            )
+        return rendered
+
+    @classmethod
+    def get_active_template(
+        cls,
+        notification_type: str,
+        contribution_type: Optional[ContributionType] = None,
+    ) -> Optional[NotificationTemplate]:
+        """
+        Retrieves the active template for a given notification purpose and contribution category.
+        1. Checks for a category-specific active template.
+        2. Falls back to a generic active template (contribution_type is None).
+        """
+        if contribution_type:
+            cat_template = NotificationTemplate.objects.filter(
+                notification_type=notification_type,
+                contribution_type=contribution_type,
+                is_active=True,
+            ).first()
+            if cat_template:
+                return cat_template
+
+        # Generic fallback template
+        return NotificationTemplate.objects.filter(
+            notification_type=notification_type,
+            contribution_type__isnull=True,
+            is_active=True,
+        ).first()
 
     @classmethod
     def get_thank_you_template(
         cls,
         contribution_type: Optional[ContributionType] = None,
     ) -> Optional[NotificationTemplate]:
-        """
-        Retrieves the most specific active Thank You template for the given contribution type.
-        Falls back to the general Thank You template if type-specific template is not found.
-        """
-        if contribution_type:
-            type_template = NotificationTemplate.objects.filter(
-                notification_type=NotificationType.THANK_YOU,
-                contribution_type=contribution_type,
-                is_active=True,
-            ).first()
-            if type_template:
-                return type_template
-
-        # Fallback to general template (contribution_type is None)
-        return NotificationTemplate.objects.filter(
+        """Shortcut for getting the active Thank You template."""
+        return cls.get_active_template(
             notification_type=NotificationType.THANK_YOU,
-            contribution_type__isnull=True,
-            is_active=True,
-        ).first()
+            contribution_type=contribution_type,
+        )
+
+    @classmethod
+    def get_receipt_template(cls) -> Optional[NotificationTemplate]:
+        """Shortcut for getting the active Receipt Delivery template."""
+        return cls.get_active_template(
+            notification_type=NotificationType.RECEIPT,
+            contribution_type=None,
+        )
 
     @classmethod
     def build_thank_you_message(
@@ -84,6 +186,8 @@ class NotificationTemplateService:
         Constructs the personalized thank-you SMS message body.
         Supports variables: {first_name}, {amount}, {currency}, {contribution_type},
         {receipt_number}, {date}, {secure_link}.
+        Does NOT mandate or force-append receipt number/link unless the template includes them.
+        Uses a neutral greeting ("Beloved") when no usable first name is supplied.
         """
         clean_first_name = (first_name or "").strip()
         display_name = clean_first_name if clean_first_name else "Beloved"
@@ -101,23 +205,176 @@ class NotificationTemplateService:
         template = cls.get_thank_you_template(contribution_type)
         if template and template.template_body:
             message = cls.render_template(template.template_body, context)
-            if receipt_number and receipt_number not in message:
-                message += f" Receipt: {receipt_number}."
-            if secure_link and secure_link not in message:
-                message += f" View: {secure_link}"
         else:
-            # Fallback per Specification 6.14
-            # "Thank you, Nicholas, for your contribution of GHS 100 towards the Building Project. God bless you."
+            # Clearly configured generic fallback per PRD & specifications
             message = (
-                f"Thank you, {display_name}, for your contribution of {currency} {amount:.2f} "
-                f"towards the {contribution_type_name}. God bless you."
+                f"Dear {display_name}, thank you for your generous contribution of {amount:.2f} {currency} "
+                f"towards {contribution_type_name} to TCI Higher Life Center. God bless you abundantly!"
             )
-            if receipt_number:
-                message += f" Receipt: {receipt_number}."
-            if secure_link:
-                message += f" View: {secure_link}"
 
         return message, template
+
+    @classmethod
+    def build_receipt_message(
+        cls,
+        first_name: Optional[str],
+        amount: Decimal,
+        currency: str = "GHS",
+        contribution_type_name: str = "Contribution",
+        receipt_number: str = "",
+        date_str: str = "",
+        secure_link: str = "",
+    ) -> Tuple[str, Optional[NotificationTemplate]]:
+        """Constructs the official receipt delivery message body."""
+        clean_first_name = (first_name or "").strip()
+        display_name = clean_first_name if clean_first_name else "Beloved"
+
+        context = {
+            "first_name": display_name,
+            "amount": f"{amount:.2f}",
+            "currency": currency,
+            "contribution_type": contribution_type_name,
+            "receipt_number": receipt_number,
+            "date": date_str,
+            "secure_link": secure_link,
+        }
+
+        template = cls.get_receipt_template()
+        if template and template.template_body:
+            message = cls.render_template(template.template_body, context)
+        else:
+            message = (
+                f"Dear {display_name}, thank you for your contribution of {amount:.2f} {currency} "
+                f"({contribution_type_name}) to TCI Higher Life Center on {date_str}. "
+                f"Your official receipt is {receipt_number}. View/download receipt: {secure_link}"
+            )
+
+        return message, template
+
+    @classmethod
+    @transaction.atomic
+    def save_and_activate_template(
+        cls,
+        template: NotificationTemplate,
+        actor: Optional[User] = None,
+    ) -> NotificationTemplate:
+        """
+        Validates, saves, and activates a template.
+        Guarantees that no ambiguous duplicate active templates exist for the same
+        (notification_type, contribution_type) pair by deactivating any existing one.
+        """
+        cls.validate_template_body(template.template_body)
+        template.is_active = True
+        template.updated_by = actor
+        template.save()
+
+        # Deactivate any duplicate active templates for same pair
+        NotificationTemplate.objects.filter(
+            notification_type=template.notification_type,
+            contribution_type=template.contribution_type,
+            is_active=True,
+        ).exclude(id=template.id).update(is_active=False)
+
+        AuditService.log(
+            action="SMS_TEMPLATE_SAVED_AND_ACTIVATED",
+            entity_type="NotificationTemplate",
+            entity_id=template.id,
+            user=actor,
+            new_values={
+                "name": template.name,
+                "notification_type": template.notification_type,
+                "contribution_type_id": str(template.contribution_type.id) if template.contribution_type else None,
+                "is_active": True,
+            },
+            result=AuditResult.SUCCESS,
+        )
+        return template
+
+    @classmethod
+    @transaction.atomic
+    def save_template(
+        cls,
+        name: str,
+        notification_type: str,
+        template_body: str,
+        template_id: Optional[uuid.UUID] = None,
+        contribution_type: Optional[ContributionType] = None,
+        is_active: bool = True,
+        actor: Optional[User] = None,
+    ) -> NotificationTemplate:
+        """
+        Saves or updates a notification template with explicit permission verification,
+        placeholder validation, duplicate de-duplication, and audit logging.
+        """
+        if actor and not (
+            getattr(actor, "is_system_administrator", False)
+            or actor.has_permission("template.manage")
+            or actor.has_permission("notification.manage")
+        ):
+            raise ValidationError("You do not have permission to manage SMS templates.")
+
+        cls.validate_template_body(template_body)
+
+        if template_id:
+            template = NotificationTemplate.objects.get(id=template_id)
+            template.name = name
+            template.notification_type = notification_type
+            template.contribution_type = contribution_type
+            template.template_body = template_body
+            template.is_active = is_active
+            template.updated_by = actor
+        else:
+            template = NotificationTemplate(
+                name=name,
+                notification_type=notification_type,
+                contribution_type=contribution_type,
+                template_body=template_body,
+                is_active=is_active,
+                created_by=actor,
+                updated_by=actor,
+            )
+
+        if is_active:
+            return cls.save_and_activate_template(template, actor=actor)
+        else:
+            template.save()
+            AuditService.log(
+                action="SMS_TEMPLATE_SAVED",
+                entity_type="NotificationTemplate",
+                entity_id=template.id,
+                user=actor,
+                new_values={"name": template.name, "is_active": False},
+                result=AuditResult.SUCCESS,
+            )
+            return template
+
+    @classmethod
+    def render_preview(
+        cls,
+        template_body: str,
+        sample_context: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, bool, Optional[str]]:
+        """
+        Renders template_body using safe sample values for previewing in the UI without sending SMS.
+        Returns: (rendered_text, is_valid, error_message).
+        """
+        defaults = {
+            "first_name": "Kofi",
+            "amount": "100.00",
+            "currency": "GHS",
+            "contribution_type": "Tithe",
+            "receipt_number": "HLC-1234567",
+            "date": timezone.localdate().strftime("%d %b %Y"),
+            "secure_link": "https://hlc.church/receipts/access/sample-token/",
+        }
+        if sample_context:
+            defaults.update(sample_context)
+
+        try:
+            rendered = cls.render_template(template_body, defaults)
+            return rendered, True, None
+        except Exception as e:
+            return "", False, str(e)
 
 
 class NotificationService:
@@ -352,15 +609,17 @@ class NotificationRetryService:
         notification.save(update_fields=["status", "attempt_count", "failure_reason", "updated_at"])
 
         # Check if already created
+        action_type = (ManualActionType.OTHER if notification.related_record_type == "Requisition"
+                       else ManualActionType.THANK_YOU_NOTIFICATION_FAILED)
         action = ManualAction.objects.filter(
             related_record_type="Notification",
             related_record_id=notification.id,
-            action_type=ManualActionType.THANK_YOU_NOTIFICATION_FAILED,
+            action_type=action_type,
         ).first()
 
         if not action:
             action = ManualAction.objects.create(
-                action_type=ManualActionType.THANK_YOU_NOTIFICATION_FAILED,
+                action_type=action_type,
                 related_record_type="Notification",
                 related_record_id=notification.id,
                 description=(

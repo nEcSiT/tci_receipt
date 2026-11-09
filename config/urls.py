@@ -2,11 +2,17 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.views.generic.base import RedirectView
 from apps.accounts import views as account_views
 from apps.contributions import views as contrib_views
 from apps.receipts import views as receipt_views
 
 urlpatterns = [
+    path("requisitions/", include("apps.requisitions.urls")),
+    path("reports/", include("apps.reports.urls")),
+    path("notifications/", include("apps.notifications.urls")),
+    path("audit/", include("apps.audit.urls")),
+    path("admin/audit/auditlog/", RedirectView.as_view(url="/audit/", permanent=False)),
     # Direct top-level authentication and recovery routes
     path("login/", account_views.LoginView.as_view(), name="login"),
     path("logout/", account_views.LogoutView.as_view(), name="logout"),

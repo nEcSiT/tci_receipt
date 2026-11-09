@@ -1,0 +1,26 @@
+{% extends 'requisitions/public_base.html' %}
+{% block content %}
+<h3>{{ requisition.requisition_number }}</h3>
+<p>Status: <strong>{{ requisition.get_status_display }}</strong></p>
+<p>Save this private link to return to this request. It expires {{ access_days }} days after creation. If lost or expired, contact the church; a name or phone number alone cannot restore access.</p>
+<p class="resume-link"><a href="{{ resume_url }}">Your private resume link — bookmark or copy this link</a></p>
+{% if error %}<div role="alert">{% for message in error %}<p>{{ message }}</p>{% endfor %}</div>{% endif %}
+{% if is_draft %}
+<p>You may save an incomplete draft. To submit, provide your name, phone, purpose, detailed description and a positive requested amount.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}
+<div class="actions"><button class="btn btn-outline" name="action" value="save">Save draft</button>
+<button class="btn btn-primary" name="action" value="submit">Submit request</button></div></form>
+{% else %}
+<p>Your request has been submitted. Keep reference <strong>{{ requisition.requisition_number }}</strong> for tracking.</p>
+<p>{{ requisition.purpose }}</p><p>Requested amount: GHS {{ requisition.amount_requested }}</p>
+<p>Submitted requests cannot be edited here.</p>
+{% endif %}
+<h3>Supporting documents</h3>
+<ul>{% for file in attachments %}<li><a href="{% url 'requisitions:attachment' token file.id %}">{{ file.file_name }}</a></li>{% empty %}<li>No documents uploaded.</li>{% endfor %}</ul>
+{% if is_draft %}
+<p>Optional: PDF, JPG/JPEG, PNG or TXT. Maximum {{ max_file_bytes }} bytes per file and {{ max_file_count }} files per request. Save form changes before uploading documents.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+<label for="documents">Supporting documents</label><input id="documents" type="file" name="documents" multiple required accept=".pdf,.jpg,.jpeg,.png,.txt">
+<button class="btn btn-outline" name="action" value="upload">Upload documents</button></form>
+{% endif %}
+{% endblock %}

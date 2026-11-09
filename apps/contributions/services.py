@@ -23,6 +23,7 @@ from apps.contributions.models import (
 )
 from apps.contributions.providers.base import PaymentResult, PaymentStatus
 from apps.contributions.providers.factory import get_payment_provider
+from apps.core.utils.phone import extract_first_name_from_provider_name
 from apps.members.models import Member, TemporaryContributor, MemberStatus
 from apps.members.services import ContributorIdentificationService
 from apps.notifications.models import (
@@ -769,14 +770,16 @@ class AutomaticPaymentService:
         )
 
         # 9. Sections 6.14, 6.15, 6.17, 6.18, 6.19, 6.21: Thank-You Notification Workflow
+        # Contributor personalization rule:
+        # If member matches, use member's first name.
+        # If no member matches, use provider-supplied first name from THIS transaction.
+        # If only a full name or no usable name is supplied, neutral greeting ("Beloved") is used.
         first_name = None
         if member:
             first_name = member.first_name
-        elif temporary_contributor:
-            if temporary_contributor.first_name:
-                first_name = temporary_contributor.first_name
-            elif temporary_contributor.name:
-                first_name = temporary_contributor.name.split()[0]
+        else:
+            tx_payer_name = payment_tx.provider_name or provider_name
+            first_name = extract_first_name_from_provider_name(tx_payer_name)
 
         receipt_number = receipt.receipt_number if receipt else ""
         secure_link = ""
@@ -799,21 +802,51 @@ class AutomaticPaymentService:
             from apps.notifications.providers.factory import get_sms_provider
             get_sms_provider().fail_next_n_times_for_phone(clean_phone, simulate_sms_failure_count)
 
-        notification = NotificationService.create_and_send_notification(
-            recipient_phone=clean_phone,
-            message=thank_you_message,
-            notification_type=NotificationType.THANK_YOU,
+        # Prevent duplicate notifications from repeated payment callbacks
+        existing_notification = Notification.objects.filter(
             related_record_type="Contribution",
             related_record_id=contribution.id,
-            recipient_name=contribution.member.full_name if contribution.member else (contribution.temporary_contributor.name if contribution.temporary_contributor else None),
-            template=template,
-            channel="SMS",
-            actor=actor,
-        )
+            notification_type=NotificationType.THANK_YOU,
+        ).first()
 
-        # Automatic retry if initial attempt failed
-        if notification.status == NotificationStatus.FAILED:
-            NotificationRetryService.retry_notification(notification, max_attempts=3, actor=actor)
+        if existing_notification:
+            notification = existing_notification
+        else:
+            recipient_display_name = (
+                member.full_name if member
+                else (payment_tx.provider_name or provider_name or "Unverified Contributor")
+            )
+            # Send automatic-payment SMS strictly to the transaction phone number
+            sms_destination_phone = payment_tx.transaction_phone or clean_phone
+            try:
+                notification = NotificationService.create_and_send_notification(
+                    recipient_phone=sms_destination_phone,
+                    message=thank_you_message,
+                    notification_type=NotificationType.THANK_YOU,
+                    related_record_type="Contribution",
+                    related_record_id=contribution.id,
+                    recipient_name=recipient_display_name,
+                    template=template,
+                    channel="SMS",
+                    actor=actor,
+                )
+
+                # Automatic retry if initial attempt failed
+                if notification.status == NotificationStatus.FAILED:
+                    NotificationRetryService.retry_notification(notification, max_attempts=3, actor=actor)
+            except Exception as sms_err:
+                logger.error(
+                    "SMS dispatch exception for contribution %s (phone %s): %s",
+                    contribution.contribution_number,
+                    sms_destination_phone,
+                    sms_err,
+                )
+                # Ensure notification is fetched or recorded so contribution stays successful
+                notification = Notification.objects.filter(
+                    related_record_type="Contribution",
+                    related_record_id=contribution.id,
+                    notification_type=NotificationType.THANK_YOU,
+                ).first()
 
         return {
             "status": "SUCCESSFUL",

@@ -37,6 +37,18 @@
           Raising disciples who disciple others. Secure financial administration, receipt verification, and trusted stewardship.
         </p>
       </div>
+
+      <div class="auth-brand-footer" style="text-align: center; margin-top: auto;">
+        <div style="font-size: 12px; color: rgba(255, 255, 255, 0.75); margin-bottom: 6px;">
+          Public Portals:
+          <a href="{% url 'requisitions:portal' %}" style="color: #FEC313; text-decoration: none; font-weight: 600; margin: 0 6px;">Request Funds</a>
+          &bull;
+          <a href="{% url 'receipts:receipt_verify' %}" style="color: #FEC313; text-decoration: none; font-weight: 600; margin: 0 6px;">Verify Receipt</a>
+        </div>
+        <div style="font-size: 11px; color: rgba(255, 255, 255, 0.45);">
+          Official Financial &amp; Receipt Management System
+        </div>
+      </div>
     </div>
 
     <!-- Right Login Panel -->
@@ -88,16 +100,48 @@
           </button>
         </form>
 
-        <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center;">
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center;">
           <span style="font-size: 13px; color: var(--text-muted);">
             System Administrator locked out?
             <a href="{% url 'accounts:recovery_initiate' %}" style="color: var(--brand-navy); font-weight: 600;">Use Admin Recovery</a>
           </span>
         </div>
+
+        <!-- Public Self-Service Portals -->
+        <div style="margin-top: 20px; padding: 14px 16px; background-color: var(--surface-subtle); border: 1px solid var(--border-color); border-radius: 8px;">
+          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 8px;">
+            Public Church Services
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <a href="{% url 'requisitions:portal' %}" style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; padding: 8px 12px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-orange)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16l4-2 4 2 4-2 4 2V4a2 2 0 0 0-2-2z"/></svg>
+                <span style="font-size: 13px; font-weight: 600;">Request Funds</span>
+              </div>
+              <span style="font-size: 12px; color: var(--text-secondary);">&rarr;</span>
+            </a>
+            <a href="{% url 'receipts:receipt_verify' %}" style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; padding: 8px 12px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-green)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span style="font-size: 13px; font-weight: 600;">Verify Receipt Validity</span>
+              </div>
+              <span style="font-size: 12px; color: var(--text-secondary);">&rarr;</span>
+            </a>
+          </div>
+        </div>
       </div>
 
-      <div class="auth-form-footer" style="margin-top: 32px; text-align: center; font-size: 12px; color: var(--text-muted);">
-        &copy; 2026 TCI Higher Life Center. All rights reserved.
+      <div class="auth-form-footer" style="margin-top: 24px; text-align: center;">
+        <div style="display: flex; justify-content: center; gap: 14px; font-size: 12px; margin-bottom: 8px; flex-wrap: wrap;">
+          <a href="{% url 'requisitions:portal' %}" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Request Funds</a>
+          <span style="color: var(--text-muted);">&bull;</span>
+          <a href="{% url 'receipts:receipt_verify' %}" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Verify Receipt</a>
+          <span style="color: var(--text-muted);">&bull;</span>
+          <a href="{% url 'accounts:recovery_initiate' %}" style="color: var(--text-secondary); text-decoration: none; font-weight: 500;">Admin Recovery</a>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted);">
+          &copy; 2026 TCI Higher Life Center. All rights reserved.
+        </div>
       </div>
     </div>
   </div>

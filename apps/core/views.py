@@ -87,14 +87,18 @@ class DashboardView(View):
         receipts_count = Receipt.objects.count()
 
         # 3. Metric: Pending Requisitions
-        pending_requisitions = Requisition.objects.filter(
+        pending_requisitions_qs = Requisition.objects.filter(
             status__in=[
                 RequisitionStatus.SUBMITTED,
                 RequisitionStatus.UNDER_REVIEW,
                 RequisitionStatus.PENDING_DISBURSEMENT,
             ]
         )
-        pending_req_count = pending_requisitions.count()
+        pending_req_count = pending_requisitions_qs.count()
+        pending_requisitions = (
+            pending_requisitions_qs.prefetch_related("assignments__assigned_to")
+            .order_by("-submitted_at", "-created_at")[:5]
+        )
 
         # 4. Metric: Manual Actions / Attention items
         manual_actions_count = Requisition.objects.filter(status=RequisitionStatus.EVIDENCE_SUBMITTED).count()
@@ -119,5 +123,5 @@ class DashboardView(View):
             "pending_req_count": pending_req_count,
             "manual_actions_count": manual_actions_count,
             "recent_activities": recent_activities,
-            "pending_requisitions": pending_requisitions[:5],
+            "pending_requisitions": pending_requisitions,
         })

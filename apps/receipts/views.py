@@ -268,20 +268,23 @@ class ReceiptPdfView(View):
             raise PermissionDenied("You do not have permission to access this receipt PDF.")
 
         storage = get_storage_service()
-        pdf_bytes = None
-
-        if receipt.pdf_storage_key and storage.exists(receipt.pdf_storage_key):
-            try:
-                pdf_bytes = storage.get(receipt.pdf_storage_key)
-            except Exception:
-                pdf_bytes = None
+        try:
+            pdf_bytes = ReceiptPdfService.render_pdf(receipt)
+            if receipt.pdf_storage_key:
+                try:
+                    storage.save(receipt.pdf_storage_key, pdf_bytes)
+                except Exception:
+                    pass
+        except Exception:
+            pdf_bytes = None
+            if receipt.pdf_storage_key and storage.exists(receipt.pdf_storage_key):
+                try:
+                    pdf_bytes = storage.get(receipt.pdf_storage_key)
+                except Exception:
+                    pdf_bytes = None
 
         if not pdf_bytes:
-            try:
-                pdf_bytes = ReceiptPdfService.render_pdf(receipt)
-                ReceiptPdfService.generate_and_store_pdf(receipt)
-            except Exception as e:
-                return HttpResponse(f"Error compiling receipt PDF: {e}", status=500)
+            return HttpResponse("Error compiling receipt PDF.", status=500)
 
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="{receipt.receipt_number}.pdf"'
@@ -481,6 +484,13 @@ class ReceiptAccessView(View):
     """
 
     def get(self, request, token):
+        client_key = request.META.get("REMOTE_ADDR", "unknown")
+        rate_key = f"receipt-access:{client_key}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 60:
+            return HttpResponse("Too many receipt access attempts. Please try again later.", status=429)
+        cache.set(rate_key, attempts + 1, 300)
+
         receipt = ReceiptService.get_receipt_by_access_token(token)
         if not receipt:
             return render(
@@ -508,9 +518,17 @@ class ReceiptAccessView(View):
         if request.GET.get("download") == "1":
             storage = get_storage_service()
             try:
-                pdf_bytes = storage.get(receipt.pdf_storage_key)
-            except Exception:
                 pdf_bytes = ReceiptPdfService.render_pdf(receipt)
+                if receipt.pdf_storage_key:
+                    try:
+                        storage.save(receipt.pdf_storage_key, pdf_bytes)
+                    except Exception:
+                        pass
+            except Exception:
+                try:
+                    pdf_bytes = storage.get(receipt.pdf_storage_key)
+                except Exception:
+                    pdf_bytes = ReceiptPdfService.render_pdf(receipt)
             response = HttpResponse(pdf_bytes, content_type="application/pdf")
             response["Content-Disposition"] = f'attachment; filename="{receipt.receipt_number}.pdf"'
             return response

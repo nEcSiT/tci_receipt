@@ -276,6 +276,8 @@ class MemberSearchApiView(View):
     def get(self, request):
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Unauthorized"}, status=401)
+        if not (check_create_permission(request.user) or check_view_permission(request.user)):
+            return JsonResponse({"error": "Forbidden: You do not have permission to search members."}, status=403)
 
         q = request.GET.get("q", "").strip()
         if not q or len(q) < 2:

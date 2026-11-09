@@ -32,6 +32,13 @@ env_file = BASE_DIR / ".env"
 if env_file.exists():
     environ.Env.read_env(str(env_file))
 
+# Keep the staged portal private until access and upload policy is confirmed.
+REQUISITION_PORTAL_ENABLED = env.bool("REQUISITION_PORTAL_ENABLED", default=False)
+REQUISITION_ACCESS_MAX_AGE = env.int("REQUISITION_ACCESS_MAX_AGE", default=30 * 86400)
+REQUISITION_PRIVATE_STORAGE = BASE_DIR / "private_requisitions"
+REQUISITION_UPLOAD_MAX_BYTES = env.int("REQUISITION_UPLOAD_MAX_BYTES", default=5 * 1024 * 1024)
+REQUISITION_UPLOAD_MAX_COUNT = env.int("REQUISITION_UPLOAD_MAX_COUNT", default=10)
+
 SECRET_KEY = env("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY must be configured through deployment environment.")

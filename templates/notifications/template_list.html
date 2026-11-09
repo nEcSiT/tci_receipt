@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}SMS Notification Templates — TCI Higher Life Center{% endblock %}
+{% block page_title %}SMS Templates{% endblock %}
+
+{% block extra_head %}
+<style>
+  .template-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color, #D0D5DD);
+  }
+  .template-filters label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .template-filters select {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color, #D0D5DD);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 160px;
+  }
+  .template-card {
+    background: #fff;
+    border: 1px solid var(--border-color, #D0D5DD);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: box-shadow 0.15s ease;
+  }
+  .template-card:hover {
+    box-shadow: 0 4px 12px rgba(1, 14, 54, 0.06);
+  }
+  .template-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .template-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .preview-box {
+    background: var(--bg-surface, #F8F9FA);
+    border: 1px solid var(--border-color, #E5E7EB);
+    border-left: 4px solid var(--navy-dark, #010E36);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--navy-dark, #010E36);
+    margin: 12px 0;
+  }
+  .placeholder-tag {
+    display: inline-block;
+    background: rgba(1, 19, 69, 0.08);
+    color: var(--navy-dark, #010E36);
+    font-family: monospace;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; gap: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+  <a href="{% url 'notifications:notification_list' %}" style="font-weight: 500; color: var(--text-secondary); text-decoration: none; padding-bottom: 10px; font-size: 14px;">
+    SMS Delivery History
+  </a>
+  <a href="{% url 'notifications:template_list' %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: none; border-bottom: 3px solid var(--navy-dark); padding-bottom: 10px; margin-bottom: -5px; font-size: 14px;">
+    Configurable SMS Templates
+  </a>
+</div>
+
+<div class="card" style="margin-bottom: 24px; padding: 20px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+    <div>
+      <h2 style="font-size: 20px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+        SMS Templates Management
+      </h2>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 4px 0 0 0;">
+        Customize automated Thank-You messages and receipt dispatches by purpose and contribution category without writing code.
+      </p>
+    </div>
+    <div>
+      <a href="{% url 'notifications:template_create' %}" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        New SMS Template
+      </a>
+    </div>
+  </div>
+
+  <form method="get" class="template-filters">
+    <label>
+      Purpose
+      <select name="type">
+        <option value="">All Purposes</option>
+        {% for val, label in notification_types %}
+        <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Contribution Category
+      <select name="category">
+        <option value="">All Categories</option>
+        <option value="generic" {% if selected_category == "generic" %}selected{% endif %}>Generic Fallback Only</option>
+        {% for cat in categories %}
+        <option value="{{ cat.id }}" {% if selected_category == cat.id|stringformat:"s" %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Status
+      <select name="active">
+        <option value="">All Statuses</option>
+        <option value="1" {% if selected_active == "1" %}selected{% endif %}>Active</option>
+        <option value="0" {% if selected_active == "0" %}selected{% endif %}>Inactive / Draft</option>
+      </select>
+    </label>
+
+    <div style="display: flex; gap: 8px;">
+      <button type="submit" class="btn btn-primary" style="height: 34px; padding: 0 16px; font-size: 13px;">Filter</button>
+      {% if selected_type or selected_category or selected_active %}
+      <a href="{% url 'notifications:template_list' %}" class="btn btn-outline" style="height: 34px; padding: 0 12px; font-size: 13px; line-height: 32px;">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if templates_data %}
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      {% for item in templates_data %}
+        {% with tmpl=item.template %}
+        <div class="template-card">
+          <div class="template-header">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+                  {{ tmpl.name }}
+                </h3>
+                {% if tmpl.is_active %}
+                  <span class="badge badge-success">Active</span>
+                {% else %}
+                  <span class="badge badge-neutral">Inactive</span>
+                {% endif %}
+              </div>
+              <div class="template-meta" style="margin-top: 6px;">
+                <span class="badge" style="background: rgba(1, 14, 54, 0.08); color: var(--navy-dark);">
+                  Purpose: {{ tmpl.get_notification_type_display }}
+                </span>
+                {% if tmpl.contribution_type %}
+                  <span class="badge" style="background: rgba(241, 104, 34, 0.12); color: var(--color-orange, #F16822);">
+                    Category: {{ tmpl.contribution_type.name }}
+                  </span>
+                {% else %}
+                  <span class="badge" style="background: rgba(78, 203, 77, 0.12); color: #2E7D32;">
+                    Generic Fallback (All Categories)
+                  </span>
+                {% endif %}
+                {% if tmpl.updated_at %}
+                  <span style="font-size: 11px; color: var(--text-muted);">
+                    Updated {{ tmpl.updated_at|date:"M d, Y H:i" }}
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <a href="{% url 'notifications:template_edit' tmpl.id %}" class="btn btn-outline btn-sm">
+                Edit
+              </a>
+              <form method="post" action="{% url 'notifications:template_toggle_active' tmpl.id %}" style="display: inline;">
+                {% csrf_token %}
+                {% if tmpl.is_active %}
+                  <button type="submit" class="btn btn-outline btn-sm" style="color: #c92a2a; border-color: #ffc9c9;">
+                    Deactivate
+                  </button>
+                {% else %}
+                  <button type="submit" class="btn btn-outline btn-sm" style="color: #2b8a3e; border-color: #b2f2bb;">
+                    Activate
+                  </button>
+                {% endif %}
+              </form>
+            </div>
+          </div>
+
+          <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">
+            Live Sample Preview:
+          </div>
+          <div class="preview-box">
+            {{ item.preview }}
+          </div>
+
+          <div style="font-size: 12px; color: var(--text-muted);">
+            <strong>Raw Template:</strong> <code>{{ tmpl.template_body }}</code>
+          </div>
+        </div>
+        {% endwith %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="padding: 48px; text-align: center; color: var(--text-secondary);">
+      <div style="font-size: 16px; font-weight: 600; margin-bottom: 6px;">No SMS Templates Found</div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        No templates match the selected filter criteria.
+      </p>
+      <a href="{% url 'notifications:template_create' %}" class="btn btn-primary btn-sm">
+        Create Your First Template
+      </a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

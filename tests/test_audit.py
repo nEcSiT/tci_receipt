@@ -38,3 +38,39 @@ def test_audit_records_are_append_only(system_user):
     # Attempt to delete
     with pytest.raises(PermissionDenied, match="Audit records are append-only and cannot be physically deleted"):
         log_entry.delete()
+
+
+def test_audit_log_view_permissions(client, system_user, system_admin):
+    from django.urls import reverse
+    from apps.accounts.models import RolePermission, Permission
+
+    url = reverse("audit:log_list")
+
+    # Anonymous user redirected to login
+    response = client.get(url)
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+    # User without audit.view permission denied
+    client.force_login(system_user)
+    response = client.get(url)
+    assert response.status_code == 403
+
+    # User with audit.view permission allowed
+    role = system_user.user_roles.first().role
+    audit_perm = Permission.objects.get(code="audit.view")
+    RolePermission.objects.create(role=role, permission=audit_perm)
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "System Audit Trail" in response.content.decode()
+
+    # System administrator allowed
+    client.force_login(system_admin)
+    response = client.get(url)
+    assert response.status_code == 200
+
+    # Old admin URL redirects to audit list
+    response = client.get("/admin/audit/auditlog/")
+    assert response.status_code == 302
+    assert response.url == "/audit/"
+

@@ -99,14 +99,15 @@ class ReceiptDeliveryService:
         phone = recipient_phone
         if not phone:
             contrib = receipt.contribution
-            if contrib.member:
+            # Priority: for automatic payments, always use the actual transaction phone
+            if contrib.payment_transaction and contrib.payment_transaction.transaction_phone:
+                phone = contrib.payment_transaction.transaction_phone
+            elif contrib.member:
                 primary_phone = contrib.member.phone_numbers.filter(is_active=True, is_primary=True).first()
                 if not primary_phone:
                     primary_phone = contrib.member.phone_numbers.filter(is_active=True).first()
                 if primary_phone:
                     phone = primary_phone.phone_number
-            elif contrib.payment_transaction and contrib.payment_transaction.transaction_phone:
-                phone = contrib.payment_transaction.transaction_phone
             elif contrib.temporary_contributor and contrib.temporary_contributor.phone_number:
                 phone = contrib.temporary_contributor.phone_number
 
