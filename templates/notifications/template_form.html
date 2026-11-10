@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ template.name }}{% else %}New SMS Template{% endif %} — TCI Higher Life Center{% endblock %}
+{% block page_title %}{% if is_edit %}Edit SMS Template{% else %}New SMS Template{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .placeholder-pill {
+    display: inline-block;
+    background: #eef2ff;
+    color: var(--navy-dark, #010E36);
+    border: 1px solid #c7d2fe;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-family: monospace;
+    cursor: pointer;
+    margin: 3px;
+    transition: all 0.15s ease;
+  }
+  .placeholder-pill:hover {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+    transform: translateY(-1px);
+  }
+  .live-preview-box {
+    background: var(--bg-surface, #F8F9FA);
+    border: 1px solid var(--border-color, #D0D5DD);
+    border-left: 4px solid var(--navy-dark, #010E36);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--navy-dark, #010E36);
+    min-height: 70px;
+  }
+  .char-counter {
+    font-size: 12px;
+    color: var(--text-muted, #6B7280);
+    margin-top: 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+  <a href="{% url 'notifications:template_list' %}" style="text-decoration: none; font-size: 13px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 4px;">
+    &larr; Back to SMS Templates
+  </a>
+</div>
+
+<div class="card" style="padding: 24px; max-width: 820px; margin: 0 auto 32px auto;">
+  <div style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+    <h2 style="font-size: 20px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      {% if is_edit %}Edit SMS Template: {{ template.name }}{% else %}Create New SMS Template{% endif %}
+    </h2>
+    <p style="font-size: 13px; color: var(--text-secondary); margin: 4px 0 0 0;">
+      Define customizable message wording and approved placeholder variables.
+    </p>
+  </div>
+
+  {% if form.errors %}
+  <div class="alert alert-danger" style="margin-bottom: 20px; padding: 12px 16px; border-radius: 8px;">
+    <strong>Please correct the following errors:</strong>
+    <ul style="margin: 6px 0 0 0; padding-left: 20px; font-size: 13px;">
+      {% for field, errors in form.errors.items %}
+        {% for error in errors %}
+          <li>{{ field|title }}: {{ error }}</li>
+        {% endfor %}
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <form method="post" id="templateForm">
+    {% csrf_token %}
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 13px; font-weight: 600; color: var(--navy-dark); margin-bottom: 6px;">
+          Template Name <span style="color: #dc3545;">*</span>
+        </label>
+        {{ form.name }}
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">A unique descriptive name for internal reference.</div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 13px; font-weight: 600; color: var(--navy-dark); margin-bottom: 6px;">
+          Message Purpose <span style="color: #dc3545;">*</span>
+        </label>
+        {{ form.notification_type }}
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">e.g., Thank You or Receipt Delivery.</div>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 13px; font-weight: 600; color: var(--navy-dark); margin-bottom: 6px;">
+          Contribution Category
+        </label>
+        {{ form.contribution_type }}
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Leave blank for a generic fallback template across all categories.</div>
+      </div>
+    </div>
+
+    <!-- Approved Placeholders Helper -->
+    <div style="background: rgba(1, 19, 69, 0.03); border: 1px dashed var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+      <div style="font-size: 12px; font-weight: 700; color: var(--navy-dark); text-transform: uppercase; margin-bottom: 6px;">
+        Approved Placeholders (Click to Insert):
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+        {% for p in allowed_placeholders %}
+          <span class="placeholder-pill" onclick="insertPlaceholder('{{ p }}')">&#123;&#123;&nbsp;{{ p }}&nbsp;&#125;&#125;</span>
+        {% endfor %}
+      </div>
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+        Unsupported placeholders will be rejected during save. Never send an SMS with unapproved variables.
+      </div>
+    </div>
+
+    <div style="margin-bottom: 18px;">
+      <label style="display: block; font-size: 13px; font-weight: 600; color: var(--navy-dark); margin-bottom: 6px;">
+        Message Wording <span style="color: #dc3545;">*</span>
+      </label>
+      {{ form.template_body }}
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+          Personalize using the placeholder variables above.
+        </div>
+        <div class="char-counter" id="charCounter">0 characters (~1 SMS segment)</div>
+      </div>
+    </div>
+
+    <!-- Live Preview Box -->
+    <div style="margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <label style="font-size: 13px; font-weight: 600; color: var(--navy-dark); text-transform: uppercase; margin: 0;">
+          Live Rendered Preview (Sample Data)
+        </label>
+        <span id="previewStatus" class="badge badge-success" style="font-size: 10px;">Valid</span>
+      </div>
+      <div class="live-preview-box" id="previewBox">
+        {{ preview_text }}
+      </div>
+    </div>
+
+    <div style="margin-bottom: 24px; background: rgba(78, 203, 77, 0.08); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(78, 203, 77, 0.3);">
+      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--navy-dark); margin: 0;">
+        {{ form.is_active }}
+        <span>Activate this template now</span>
+      </label>
+      <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; margin-left: 24px;">
+        Activating this template ensures it will be immediately selected for future contributions. Any competing active template for this same purpose & category will be automatically deactivated.
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <a href="{% url 'notifications:template_list' %}" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn btn-primary" style="font-weight: 600; padding: 8px 24px;">
+        {% if is_edit %}Save Changes{% else %}Create Template{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+  function insertPlaceholder(name) {
+    const textarea = document.getElementById("id_template_body");
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const insert = "{" + name + "}";
+    textarea.value = text.substring(0, start) + insert + text.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + insert.length;
+    textarea.focus();
+    updatePreview();
+  }
+
+  const sampleValues = {
+    "first_name": "Kofi",
+    "amount": "100.00",
+    "currency": "GHS",
+    "contribution_type": "Tithe",
+    "receipt_number": "HLC-1234567",
+    "date": "{% now 'd M Y' %}",
+    "secure_link": "https://hlc.church/receipts/access/sample-token/"
+  };
+
+  const allowed = new Set([
+    "first_name", "amount", "currency", "contribution_type", "receipt_number", "date", "secure_link"
+  ]);
+
+  function updatePreview() {
+    const textarea = document.getElementById("id_template_body");
+    const previewBox = document.getElementById("previewBox");
+    const counter = document.getElementById("charCounter");
+    const status = document.getElementById("previewStatus");
+    if (!textarea || !previewBox) return;
+
+    const raw = textarea.value;
+    const length = raw.length;
+    const segments = Math.ceil(length / 160) || 1;
+    counter.textContent = length + " characters (~" + segments + " SMS segment" + (segments > 1 ? "s" : "") + ")";
+
+    if (!raw.trim()) {
+      previewBox.innerHTML = '<em style="color: var(--text-muted);">Enter wording above to see live preview...</em>';
+      status.className = "badge badge-neutral";
+      status.textContent = "Empty";
+      return;
+    }
+
+    // Check placeholders in raw
+    let rendered = raw;
+    let hasError = false;
+    let errorMsg = "";
+
+    const matches = raw.match(/\{([^{}]+)\}/g);
+    if (matches) {
+      for (const m of matches) {
+        const key = m.slice(1, -1);
+        if (!allowed.has(key)) {
+          hasError = true;
+          errorMsg = "Unsupported placeholder: " + m;
+          break;
+        }
+        const val = sampleValues[key] !== undefined ? sampleValues[key] : m;
+        rendered = rendered.split(m).join(val);
+      }
+    }
+
+    if (hasError) {
+      status.className = "badge badge-danger";
+      status.textContent = errorMsg;
+      previewBox.innerHTML = '<span style="color: #dc3545; font-weight: 600;">' + errorMsg + '</span>';
+    } else {
+      status.className = "badge badge-success";
+      status.textContent = "Valid";
+      previewBox.textContent = rendered;
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    const textarea = document.getElementById("id_template_body");
+    if (textarea) {
+      textarea.addEventListener("input", updatePreview);
+      updatePreview();
+    }
+  });
+</script>
+{% endblock %}

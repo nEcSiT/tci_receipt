@@ -1,5 +1,6 @@
 import logging
 from django.contrib import messages
+from django.core.cache import cache
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
@@ -71,6 +72,15 @@ class PasswordResetRequestView(View):
         return render(request, "accounts/password_reset_request.html")
 
     def post(self, request):
+        client_ip = request.META.get("REMOTE_ADDR", "unknown")
+        rate_key = f"pwd-reset-req:{client_ip}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 10:
+            return render(request, "accounts/password_reset_request.html", {
+                "error": "Too many password reset requests. Please wait a few minutes and try again."
+            }, status=429)
+        cache.set(rate_key, attempts + 1, 600)
+
         email = request.POST.get("email", "")
         reset_url_base = request.build_absolute_uri("/password-reset/confirm/")
         success, raw_token = AuthService.request_password_reset(email, reset_url_base=reset_url_base)
@@ -112,6 +122,15 @@ class AdminRecoveryInitiateView(View):
         return render(request, "accounts/recovery_initiate.html")
 
     def post(self, request):
+        client_ip = request.META.get("REMOTE_ADDR", "unknown")
+        rate_key = f"admin-rec-init:{client_ip}"
+        attempts = cache.get(rate_key, 0)
+        if attempts >= 5:
+            return render(request, "accounts/recovery_initiate.html", {
+                "error": "Too many recovery attempts. Please wait 15 minutes before trying again."
+            }, status=429)
+        cache.set(rate_key, attempts + 1, 900)
+
         email = request.POST.get("email", "")
         session, email_otp, phone_otp, error = AdminRecoveryService.initiate_recovery(email)
 
@@ -126,7 +145,7 @@ class AdminRecoveryInitiateView(View):
 
 
 class AdminRecoveryVerifyView(View):
-    """Verifies Email OTP followed by Phone OTP."""
+    """Verifies Email OTP followed by Phone OTP with brute-force defense."""
 
     def get(self, request):
         session_token = request.session.get("recovery_session_token")
@@ -150,12 +169,24 @@ class AdminRecoveryVerifyView(View):
             messages.error(request, "Recovery session expired.")
             return redirect("accounts:recovery_initiate")
 
+        attempt_key = f"admin-rec-attempts:{session_token}"
+        failed_attempts = cache.get(attempt_key, 0)
+        if failed_attempts >= 4:
+            session.is_completed = True
+            session.save(update_fields=["is_completed"])
+            request.session.pop("recovery_session_token", None)
+            return render(request, "accounts/recovery_verify.html", {
+                "session": session,
+                "error": "Too many invalid attempts. This recovery session has been locked for security.",
+            }, status=429)
+
         step = request.POST.get("step")
         otp = request.POST.get("otp", "")
 
         if step == "email":
             success, error = AdminRecoveryService.verify_email_otp(session_token, otp)
             if not success:
+                cache.set(attempt_key, failed_attempts + 1, 900)
                 return render(request, "accounts/recovery_verify.html", {
                     "session": session,
                     "error": error,
@@ -166,12 +197,14 @@ class AdminRecoveryVerifyView(View):
         elif step == "phone":
             success, error = AdminRecoveryService.verify_phone_otp(session_token, otp)
             if not success:
+                cache.set(attempt_key, failed_attempts + 1, 900)
                 return render(request, "accounts/recovery_verify.html", {
                     "session": session,
                     "error": error,
                     "dev_email_otp": request.session.get("dev_email_otp"),
                     "dev_phone_otp": request.session.get("dev_phone_otp"),
                 }, status=400)
+            cache.delete(attempt_key)
             messages.success(request, "Verification complete! You may now set a new password.")
             return redirect("accounts:recovery_reset")
 

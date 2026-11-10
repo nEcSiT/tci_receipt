@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs{% endblock %}
+{% block page_title %}Audit Logs{% endblock %}
+
+{% block extra_head %}
+<style>
+  .audit-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color, #D0D5DD);
+  }
+  .audit-filters label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .audit-filters input, .audit-filters select {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color, #D0D5DD);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .audit-table td {
+    font-size: 13px;
+    vertical-align: top;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h2 class="card-title" style="margin-bottom: 2px;">System Audit Trail</h2>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+        Immutable append-only record of system and user activities.
+      </p>
+    </div>
+    <span class="badge badge-neutral">Tamper-Proof</span>
+  </div>
+
+  <form method="get" class="audit-filters">
+    <label>
+      Search
+      <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Action, entity, user, reason..." style="min-width: 200px;">
+    </label>
+    <label>
+      Actor
+      <select name="actor_type">
+        <option value="">All Actors</option>
+        {% for val, label in actor_types %}
+        <option value="{{ val }}" {% if request.GET.actor_type == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Result
+      <select name="result">
+        <option value="">All Results</option>
+        {% for val, label in audit_results %}
+        <option value="{{ val }}" {% if request.GET.result == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary btn-sm" style="padding: 7px 14px;">Filter</button>
+    {% if request.GET.q or request.GET.actor_type or request.GET.result or request.GET.action %}
+    <a href="{% url 'audit:log_list' %}" class="btn btn-outline btn-sm" style="padding: 7px 14px;">Reset</a>
+    {% endif %}
+  </form>
+
+  <div class="table-responsive">
+    <table class="table audit-table">
+      <thead>
+        <tr>
+          <th style="white-space: nowrap;">Timestamp</th>
+          <th>Actor</th>
+          <th>Action</th>
+          <th>Entity</th>
+          <th>Entity ID</th>
+          <th>Result</th>
+          <th>Details / Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in page %}
+        <tr>
+          <td style="white-space: nowrap; font-size: 12px; color: var(--text-secondary);">
+            {{ item.created_at|date:"Y-m-d H:i:s" }}
+          </td>
+          <td>
+            <strong>{{ item.user.full_name|default:item.actor_type }}</strong>
+            {% if item.user %}<div style="font-size: 11px; color: var(--text-muted);">{{ item.user.email }}</div>{% endif %}
+          </td>
+          <td>
+            <span style="font-weight: 600; font-family: monospace; font-size: 12px; color: var(--brand-navy);">
+              {{ item.action }}
+            </span>
+          </td>
+          <td>{{ item.entity_type }}</td>
+          <td>
+            <span style="font-family: monospace; font-size: 11px; color: var(--text-muted);" title="{{ item.entity_id }}">
+              {{ item.entity_id|stringformat:"s"|slice:":8" }}...
+            </span>
+          </td>
+          <td>
+            {% if item.result == 'SUCCESS' %}
+            <span class="badge badge-success" style="font-size: 11px;">Success</span>
+            {% elif item.result == 'FAILURE' %}
+            <span class="badge badge-error" style="font-size: 11px;">Failure</span>
+            {% else %}
+            <span class="badge badge-warning" style="font-size: 11px;">{{ item.result }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size: 12px; max-width: 280px; word-break: break-word;">
+            {{ item.reason|default:"—" }}
+            {% if item.provider_reference %}
+            <div style="font-size: 11px; color: var(--text-muted);">Ref: {{ item.provider_reference }}</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 36px; color: var(--text-muted);">
+            No audit records matching the specified criteria.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page.paginator.num_pages > 1 %}
+  <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid var(--surface-subtle);">
+    <div style="font-size: 13px; color: var(--text-secondary);">
+      Page {{ page.number }} of {{ page.paginator.num_pages }} ({{ page.paginator.count }} total records)
+    </div>
+    <div style="display: flex; gap: 8px;">
+      {% if page.has_previous %}
+      <a href="?page={{ page.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.actor_type %}&actor_type={{ request.GET.actor_type }}{% endif %}{% if request.GET.result %}&result={{ request.GET.result }}{% endif %}" class="btn btn-outline btn-sm">
+        &larr; Previous
+      </a>
+      {% endif %}
+      {% if page.has_next %}
+      <a href="?page={{ page.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.actor_type %}&actor_type={{ request.GET.actor_type }}{% endif %}{% if request.GET.result %}&result={{ request.GET.result }}{% endif %}" class="btn btn-outline btn-sm">
+        Next &rarr;
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

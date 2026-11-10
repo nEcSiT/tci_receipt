@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied
 
 
 class ActorType(models.TextChoices):
+    REQUESTER = "REQUESTER", "External requester"
     USER = "USER", "User"
     SYSTEM = "SYSTEM", "System"
     PROVIDER = "PROVIDER", "Provider"

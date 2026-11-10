@@ -353,6 +353,8 @@ class TemporaryContributorActionView(View):
     def post(self, request, tc_id):
         if not request.user.is_authenticated:
             return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.edit") or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to manage temporary contributors.")
 
         tc = get_object_or_404(TemporaryContributor, id=tc_id)
         action = request.POST.get("action")

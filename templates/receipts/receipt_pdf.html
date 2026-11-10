@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt {{ receipt.receipt_number }} — TCI Higher Life Center</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 14mm 10mm 14mm;
+      @bottom-center {
+        content: "TCI Higher Life Center • Official Financial Record • Jesus Saves, Heals & Satisfies";
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 7pt;
+        color: #94A3B8;
+      }
+    }
+
+    *, *:before, *:after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #0F172A;
+      background: #ffffff;
+      font-size: 9pt;
+      line-height: 1.4;
+      -webkit-print-color-adjust: exact;
+      page-break-inside: avoid;
+    }
+
+    /* Single-Page Container */
+    .receipt-container {
+      width: 100%;
+      border: 1px solid #E2E8F0;
+      border-radius: 6px;
+      background: #ffffff;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* Top Brand Accent Bar */
+    .brand-accent-strip {
+      width: 100%;
+      height: 4px;
+      background-color: #011345;
+    }
+
+    /* Header Section */
+    .header-section {
+      padding: 14px 20px 12px 20px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .header-table td {
+      vertical-align: middle;
+    }
+
+    .logo-cell {
+      width: 48px;
+      max-width: 48px;
+    }
+
+    .logo-cell img {
+      width: 42px;
+      height: 42px;
+      max-width: 42px;
+      max-height: 42px;
+      display: block;
+    }
+
+    .logo-cell svg {
+      width: 42px;
+      height: 42px;
+      display: block;
+    }
+
+    .brand-cell {
+      padding-left: 12px;
+    }
+
+    .brand-title {
+      font-size: 14pt;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      color: #011345;
+      line-height: 1.15;
+    }
+
+    .brand-subtitle {
+      font-size: 7.5pt;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 1px;
+    }
+
+    .brand-motto {
+      font-size: 7.5pt;
+      color: #F16822;
+      font-style: italic;
+      margin-top: 1px;
+    }
+
+    .meta-cell {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .meta-label {
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #64748B;
+      margin-bottom: 1px;
+    }
+
+    .receipt-number {
+      font-size: 13.5pt;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #011345;
+    }
+
+    .status-badge {
+      display: inline-block;
+      margin-top: 3px;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 2px 7px;
+      border-radius: 3px;
+    }
+
+    .status-badge-valid {
+      background-color: #ECFDF5;
+      color: #047857;
+      border: 1px solid #A7F3D0;
+    }
+
+    .status-badge-deleted {
+      background-color: #FEF2F2;
+      color: #B91C1C;
+      border: 1px solid #FECACA;
+    }
+
+    /* Content Body */
+    .receipt-body {
+      padding: 14px 20px 12px 20px;
+    }
+
+    /* Amount & Date Card */
+    .amount-card {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 5px;
+      padding: 10px 16px;
+      margin-bottom: 12px;
+    }
+
+    .amount-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .amount-table td {
+      vertical-align: middle;
+    }
+
+    .amount-label {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #64748B;
+      font-weight: 700;
+      margin-bottom: 1px;
+    }
+
+    .amount-value {
+      font-size: 17pt;
+      font-weight: 800;
+      color: #011345;
+      letter-spacing: -0.2px;
+    }
+
+    .date-label {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #64748B;
+      font-weight: 700;
+      margin-bottom: 1px;
+      text-align: right;
+    }
+
+    .date-value {
+      font-size: 10pt;
+      font-weight: 700;
+      color: #0F172A;
+      text-align: right;
+    }
+
+    /* Financial Details Table */
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+    }
+
+    .details-table tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .details-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #F1F5F9;
+      vertical-align: top;
+    }
+
+    .field-name {
+      width: 28%;
+      font-size: 8pt;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .field-val {
+      font-size: 9pt;
+      color: #0F172A;
+    }
+
+    .field-val strong {
+      font-weight: 700;
+      color: #011345;
+    }
+
+    .mono-text {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 8.5pt;
+      color: #334155;
+      font-weight: 600;
+    }
+
+    /* Footer & Verification Box */
+    .footer-section {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 10px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .stewardship-msg {
+      font-size: 8.5pt;
+      font-weight: 600;
+      color: #011345;
+      text-align: center;
+      margin-bottom: 2px;
+    }
+
+    .scripture-line {
+      font-size: 7.5pt;
+      font-style: italic;
+      color: #64748B;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .verification-card {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 4px;
+      padding: 7px 12px;
+      font-size: 7.5pt;
+      color: #64748B;
+      line-height: 1.4;
+    }
+
+    .verification-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .verification-table td {
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="receipt-container">
+    <!-- Top Navy Brand Bar -->
+    <div class="brand-accent-strip"></div>
+
+    <!-- Header Section -->
+    <div class="header-section">
+      <table class="header-table">
+        <tr>
+          <td class="logo-cell">
+            {% if logo_base64 %}
+              <img src="{{ logo_base64 }}" alt="TCI HLC Logo">
+            {% else %}
+              <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="24" cy="24" r="22" fill="#011345" stroke="#FEC313" stroke-width="2"/>
+                <path d="M24 10V38" stroke="#FEC313" stroke-width="3" stroke-linecap="round"/>
+                <path d="M16 19H32" stroke="#FEC313" stroke-width="3" stroke-linecap="round"/>
+                <path d="M24 8C27 12 29 15 28 18C26.5 16 25 15.5 24 16C23 15.5 21.5 16 20 18C19 15 21 12 24 8Z" fill="#F16822"/>
+              </svg>
+            {% endif %}
+          </td>
+          <td class="brand-cell">
+            <div class="brand-title">TCI HIGHER LIFE CENTER</div>
+            <div class="brand-subtitle">Financial Administration &amp; Treasury</div>
+            <div class="brand-motto">"Jesus Saves, Heals &amp; Satisfies"</div>
+          </td>
+          <td class="meta-cell">
+            <div class="meta-label">Official Receipt</div>
+            <div class="receipt-number">{{ receipt.receipt_number }}</div>
+            {% if receipt.is_deleted %}
+              <span class="status-badge status-badge-deleted">Void / Cancelled</span>
+            {% else %}
+              <span class="status-badge status-badge-valid">Verified Official Record</span>
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Body Section -->
+    <div class="receipt-body">
+      <!-- Amount & Date Banner -->
+      <div class="amount-card">
+        <table class="amount-table">
+          <tr>
+            <td>
+              <div class="amount-label">Amount Received</div>
+              <div class="amount-value">{{ receipt.contribution.currency }} {{ receipt.contribution.amount|floatformat:2 }}</div>
+            </td>
+            <td>
+              <div class="date-label">Contribution Date</div>
+              <div class="date-value">{{ receipt.contribution.contribution_date|date:"F d, Y" }}</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Financial Details Table -->
+      <table class="details-table">
+        <tr>
+          <td class="field-name">Contributor</td>
+          <td class="field-val">
+            <strong>{{ receipt.contributor_name }}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td class="field-name">Contribution Type</td>
+          <td class="field-val">
+            {{ receipt.contribution.contribution_type.name }}
+            {% if receipt.contribution.custom_type_description %}
+              <div style="font-size: 8pt; color: #64748B; margin-top: 1px;">
+                Note: {{ receipt.contribution.custom_type_description }}
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="field-name">Payment Method</td>
+          <td class="field-val">{{ receipt.contribution.get_payment_mode_display }}</td>
+        </tr>
+        {% if receipt.contribution.reference_number %}
+        <tr>
+          <td class="field-name">Reference / Txn #</td>
+          <td class="field-val mono-text">{{ receipt.contribution.reference_number }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td class="field-name">Contribution ID</td>
+          <td class="field-val mono-text">{{ receipt.contribution.contribution_number }}</td>
+        </tr>
+        <tr>
+          <td class="field-name">Issued By</td>
+          <td class="field-val">{{ receipt.generated_by_display }}</td>
+        </tr>
+        <tr>
+          <td class="field-name">Issued Timestamp</td>
+          <td class="field-val">{{ receipt.generated_at|date:"F d, Y H:i:s" }} UTC</td>
+        </tr>
+      </table>
+
+      <!-- Footer & Verification Notice -->
+      <div class="footer-section">
+        <div class="stewardship-msg">
+          Thank you for your faithful kingdom stewardship and contribution.
+        </div>
+        <div class="scripture-line">
+          Raising disciples who disciple others • TCI Higher Life Center
+        </div>
+
+        <div class="verification-card">
+          <table class="verification-table">
+            <tr>
+              <td>
+                <strong>Online Verification:</strong> Verify at <code>/receipts/verify/{{ receipt.receipt_number }}/</code>
+              </td>
+              <td style="text-align: right;">
+                System Record ID: <span class="mono-text">{{ receipt.id }}</span>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding-top: 3px; font-size: 7pt; color: #94A3B8;">
+                This official receipt was electronically generated by the TCI Higher Life Center Financial Management System.
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

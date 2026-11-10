@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Contributions by Payment Method{% endblock %}
+{% block page_title %}Contributions by Payment Method{% endblock %}
+{% block content %}
+<div class="card">
+  <h1 class="card-title">Contributions by Payment Method</h1>
+  <p>Confirmed contributions, using the contribution date. Amounts are shown separately for each currency. Leave dates blank for all time.</p>
+  <form method="get">
+    {{ filter_form.non_field_errors }}
+    <div style="display:flex; flex-wrap:wrap; gap:16px; margin:20px 0;">
+      {% for field in filter_form %}
+      <div><label for="{{ field.id_for_label }}">{{ field.label }}</label><br>{{ field }}{{ field.errors }}</div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-primary" type="submit">Apply filters</button>
+    <a class="btn btn-outline" href="{% url 'core:payment_summary' %}">Reset</a>
+  </form>
+</div>
+{% if not filter_form.errors %}
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Payment breakdown</h2>
+    {% if can_export %}<a class="btn btn-outline" href="?{{ export_query }}">Export CSV</a>{% endif %}
+  </div>
+  <div class="table-responsive"><table class="table">
+    <thead><tr><th>Payment method</th><th>Currency</th><th>Contributions</th><th>Amount</th></tr></thead>
+    <tbody>{% for row in summary_rows %}
+      <tr><td><a href="{{ row.url }}">{{ row.label }}</a></td><td>{{ row.currency }}</td><td>{{ row.count }}</td><td>{{ row.amount|floatformat:2 }}</td></tr>
+    {% empty %}<tr><td colspan="4">No confirmed contributions match these filters.</td></tr>{% endfor %}</tbody>
+    <tfoot>{% for row in currency_totals %}<tr><th>Total</th><th>{{ row.currency }}</th><th>{{ row.count }}</th><th>{{ row.amount|floatformat:2 }}</th></tr>{% endfor %}</tfoot>
+  </table></div>
+</div>
+<div class="card">
+  <h2 class="card-title">Matching contributions</h2>
+  <div class="table-responsive"><table class="table">
+    <thead><tr><th>Contribution ID</th><th>Date</th><th>Type</th><th>Payment method</th><th>Entry method</th><th>Currency</th><th>Amount</th></tr></thead>
+    <tbody>{% for contribution in page_obj %}<tr>
+      <td>{{ contribution.contribution_number }}</td><td>{{ contribution.contribution_date|date:"Y-m-d" }}</td>
+      <td>{{ contribution.contribution_type.name }}</td><td>{{ contribution.get_payment_mode_display }}</td>
+      <td>{{ contribution.get_entry_method_display }}</td><td>{{ contribution.currency }}</td><td>{{ contribution.amount|floatformat:2 }}</td>
+    </tr>{% empty %}<tr><td colspan="7">No matching contributions.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <nav aria-label="Contribution pages">
+    {% if page_obj.has_previous %}<a href="?{{ filter_query }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?{{ filter_query }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+  </nav>
+</div>
+{% endif %}
+{% endblock %}

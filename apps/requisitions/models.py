@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 from django.db import models
 from django.core.exceptions import ValidationError
@@ -54,8 +55,8 @@ class Requisition(UUIDBaseModel):
     Table: requisitions
     """
     requisition_number = models.CharField(max_length=50, unique=True, db_index=True)
-    requester_name = models.CharField(max_length=200)
-    requester_phone = models.CharField(max_length=30, db_index=True)
+    requester_name = models.CharField(max_length=200, blank=True)
+    requester_phone = models.CharField(max_length=30, db_index=True, blank=True)
     requester_member = models.ForeignKey(
         Member,
         on_delete=models.SET_NULL,
@@ -67,9 +68,9 @@ class Requisition(UUIDBaseModel):
     team = models.CharField(max_length=150, null=True, blank=True)
     department = models.CharField(max_length=150, null=True, blank=True)
     group_name = models.CharField(max_length=150, null=True, blank=True)
-    purpose = models.CharField(max_length=255)
-    description = models.TextField()
-    amount_requested = models.DecimalField(max_digits=12, decimal_places=2)
+    purpose = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    amount_requested = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     date_funds_needed = models.DateField(null=True, blank=True)
     preferred_disbursement_method = models.CharField(
         max_length=30,
@@ -93,6 +94,8 @@ class Requisition(UUIDBaseModel):
         related_name="referenced_by"
     )
     submitted_at = models.DateTimeField(null=True, blank=True)
+    access_version = models.UUIDField(default=uuid.uuid4, editable=False)
+    creation_key = models.UUIDField(null=True, blank=True, unique=True, editable=False)
 
     class Meta:
         db_table = "requisitions"
@@ -101,13 +104,19 @@ class Requisition(UUIDBaseModel):
         ordering = ["-created_at"]
 
     def clean(self):
+        if self.status != RequisitionStatus.DRAFT:
+            errors = {name: "This field is required on submission." for name in
+                      ("requester_name", "requester_phone", "purpose", "description", "amount_requested")
+                      if not getattr(self, name)}
+            if errors:
+                raise ValidationError(errors)
         if self.amount_requested is not None and self.amount_requested <= Decimal("0.00"):
             raise ValidationError("Requested amount must be strictly greater than zero.")
 
         # Business Rule 25: Rejected requisitions cannot be edited or resubmitted.
         if self.pk and not self._state.adding:
             original = Requisition.objects.filter(pk=self.pk).first()
-            if original and original.status == RequisitionStatus.REJECTED and self.status != RequisitionStatus.REJECTED:
+            if original and original.status == RequisitionStatus.REJECTED:
                 raise ValidationError("Rejected requisitions cannot be edited or resubmitted. A new requisition is required.")
 
     def save(self, *args, **kwargs):
@@ -190,6 +199,8 @@ class RequisitionAssignment(UUIDBaseModel):
 
     class Meta:
         db_table = "requisition_assignments"
+        constraints = [models.UniqueConstraint(fields=['requisition'], condition=models.Q(is_current=True),
+                                                name='one_current_requisition_assignment')]
         verbose_name = "Requisition Assignment"
         verbose_name_plural = "Requisition Assignments"
         ordering = ["-assigned_at"]
@@ -220,10 +231,12 @@ class RequisitionApproval(UUIDBaseModel):
         ordering = ["-created_at"]
 
     def clean(self):
-        if self.decision == ApprovalDecision.REJECTED and not self.reason:
+        if self.decision == ApprovalDecision.REJECTED and not (self.reason or '').strip():
             raise ValidationError("A reason is mandatory when rejecting a requisition.")
         if self.decision == ApprovalDecision.APPROVED and self.approved_amount is None:
             raise ValidationError("An approved amount must be specified when approving a requisition.")
+        if self.decision == ApprovalDecision.APPROVED and self.approved_amount is not None and self.approved_amount <= 0:
+            raise ValidationError("Approved amount must be greater than zero.")
 
     def save(self, *args, **kwargs):
         self.full_clean()

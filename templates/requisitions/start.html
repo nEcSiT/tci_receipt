@@ -1,0 +1,9 @@
+{% extends 'requisitions/public_base.html' %}
+{% block content %}
+<p>Create a draft, save your progress and submit when ready. No staff account is needed.</p>
+<p>Your private link grants access to your request. Keep it safe and do not share it.</p>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if creation_key %}<form method="post">{% csrf_token %}
+<input type="hidden" name="creation_key" value="{{ creation_key }}">
+<button class="btn btn-primary" type="submit">Create draft</button></form>{% endif %}
+{% endblock %}

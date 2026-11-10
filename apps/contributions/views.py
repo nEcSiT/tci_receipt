@@ -1,13 +1,19 @@
 import datetime
+import json
+import hashlib
+import hmac
 from decimal import Decimal
 from django.contrib import messages
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Sum, Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.conf import settings
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 
 from apps.audit.models import AuditLog
 from apps.contributions.models import (
@@ -17,7 +23,12 @@ from apps.contributions.models import (
     EntryMethod,
     ContributionStatus,
 )
-from apps.contributions.services import ContributionService
+from apps.contributions.providers.factory import get_payment_provider
+from apps.contributions.services import (
+    ContributionService,
+    AutomaticPaymentService,
+    UssdService,
+)
 from apps.members.models import Member, MemberStatus
 
 
@@ -265,6 +276,8 @@ class MemberSearchApiView(View):
     def get(self, request):
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Unauthorized"}, status=401)
+        if not (check_create_permission(request.user) or check_view_permission(request.user)):
+            return JsonResponse({"error": "Forbidden: You do not have permission to search members."}, status=403)
 
         q = request.GET.get("q", "").strip()
         if not q or len(q) < 2:
@@ -299,3 +312,91 @@ class MemberSearchApiView(View):
             )
 
         return JsonResponse({"results": results})
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class PaymentWebhookView(View):
+    """
+    Receives and processes incoming payment provider webhook callbacks.
+    Decoupled via Provider Abstraction.
+    """
+
+    def post(self, request, *args, **kwargs):
+        try:
+            if request.content_type == "application/json":
+                payload = json.loads(request.body.decode("utf-8"))
+            else:
+                payload = request.POST.dict()
+        except Exception as e:
+            return JsonResponse({"error": f"Invalid payload: {str(e)}"}, status=400)
+
+        provider = get_payment_provider()
+        if not provider.verify_webhook(request.body, {key: value for key, value in request.headers.items()}):
+            return JsonResponse({"error": "Webhook authentication failed."}, status=401)
+        payment_result = provider.parse_webhook(payload)
+
+        # Extract contribution type or default to General / Tithe
+        c_type_name = payload.get("contribution_type") or payload.get("type") or "Tithe"
+        desc = payload.get("custom_type_description") or payload.get("description")
+
+        try:
+            result = AutomaticPaymentService.process_payment_confirmation(
+                provider_reference=payment_result.provider_reference,
+                transaction_phone=payment_result.transaction_phone,
+                amount=payment_result.amount,
+                contribution_type_name=c_type_name,
+                custom_type_description=desc,
+                status=payment_result.status,
+                provider=payment_result.provider,
+                provider_name=payment_result.provider_name,
+                failure_code=payment_result.failure_code,
+                failure_reason=payment_result.failure_reason,
+                provider_data=payment_result.provider_data,
+            )
+            return JsonResponse({
+                "status": result["status"],
+                "provider_reference": payment_result.provider_reference,
+                "contribution_number": result["contribution"].contribution_number if result.get("contribution") else None,
+                "receipt_number": result["receipt"].receipt_number if result.get("receipt") else None,
+            })
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=422)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class UssdGatewayView(View):
+    """
+    HTTP Gateway endpoint for telecom USSD aggregation providers (Hubtel, Africa's Talking).
+    Initial menu response begins strictly with: 'Welcome to TCI HLC Givings'
+    """
+
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.DEBUG:
+            secret = getattr(settings, "USSD_GATEWAY_SECRET", "")
+            signature = request.headers.get("X-USSD-Signature", "")
+            expected = hmac.new(secret.encode("utf-8"), request.body, hashlib.sha256).hexdigest() if secret else ""
+            if not secret or not signature or not hmac.compare_digest(signature, expected):
+                return JsonResponse({"error": "USSD gateway authentication failed."}, status=401)
+
+        session_id = request.GET.get("sessionId") or request.POST.get("sessionId") or "session-demo"
+        phone = request.GET.get("phoneNumber") or request.POST.get("phoneNumber") or "0240000001"
+        text = request.GET.get("text") if "text" in request.GET else request.POST.get("text", "")
+
+        result = UssdService.handle_request(
+            session_id=session_id,
+            phone_number=phone,
+            text=text,
+            simulate_success=True,
+        )
+
+        prefix = "END " if result["is_terminal"] else "CON "
+        response_text = f"{prefix}{result['message']}"
+
+        if "application/json" in request.headers.get("Accept", ""):
+            return JsonResponse({
+                "message": result["message"],
+                "is_terminal": result["is_terminal"],
+                "ussd_string": response_text,
+            })
+
+        return HttpResponse(response_text, content_type="text/plain")
