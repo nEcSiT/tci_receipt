@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% load account_tags %}
+{% block title %}{{ requisition.requisition_number }}{% endblock %}
+{% block page_title %}Requisition details{% endblock %}
+{% block extra_head %}<style>.requisition-detail{max-width:960px}.requisition-detail h2{margin-top:1.5rem}.requisition-detail p{margin:.6rem 0}.requisition-detail ul{padding-left:1.25rem}.requisition-detail label{display:block;margin:1rem 0}.requisition-detail input,.requisition-detail textarea{display:block;max-width:100%;width:100%}</style>{% endblock %}
+{% block content %}
+<div class="card requisition-detail">
+<h1>{{ requisition.requisition_number }}</h1><p>{{ requisition.get_status_display }}</p>
+{% if pending and user|has_perm:'requisition.review' %}<form method="post">{% csrf_token %}<button class="btn btn-primary">Start Working</button></form>{% endif %}
+<h2>Requester</h2><p>{{ requisition.requester_name }} · {{ requisition.requester_phone }}</p>
+<p>{{ requisition.ministry|default:'' }} {{ requisition.team|default:'' }} {{ requisition.department|default:'' }} {{ requisition.group_name|default:'' }}</p>
+<h2>{{ requisition.purpose }}</h2><p>{{ requisition.description|linebreaksbr }}</p>
+<p>Needed: {{ requisition.date_funds_needed|default:'Not specified' }}</p>
+<h2>Financial summary</h2><p>Requested: GHS {{ requisition.amount_requested }}</p>
+<p>Approved: {% if requisition.approved_amount %}GHS {{ requisition.approved_amount }}{% else %}Not yet approved{% endif %}</p><p>Disbursed: GHS {{ requisition.disbursed_amount }}</p>
+<p>Preferred method: {{ requisition.get_preferred_disbursement_method_display|default:'Not specified' }}</p><p>{{ requisition.preferred_disbursement_details|default:'' }}</p>
+<p>{{ requisition.remarks|default:'' }}</p>
+<h2>Supporting documents</h2><ul>{% for file in requisition.attachments.all %}<li><a href="{% url 'requisitions:staff_attachment' requisition.id file.id %}">{{ file.file_name }}</a></li>{% empty %}<li>No supporting documents.</li>{% endfor %}</ul>
+<h2>Assignment history</h2><ul>{% for item in requisition.assignments.all %}<li>{{ item.assigned_to.full_name }} · {{ item.assigned_at }}{% if item.released_at %} · Released {{ item.released_at }}: {{ item.release_reason }}{% endif %}</li>{% empty %}<li>Unassigned</li>{% endfor %}</ul>
+{% if requisition.status == 'UNDER_REVIEW' and user|has_perm:'requisition.approve' %}
+<h2>Decision</h2>
+<form method="post">{% csrf_token %}<label>Approved amount (GHS)<input name="amount" type="number" step="0.01" min="0.01"></label>
+<label>Remarks<textarea name="remarks"></textarea></label>
+<label>Rejection reason<textarea name="reason"></textarea></label>
+<button class="btn btn-primary" name="action" value="APPROVED">Approve</button>
+<button class="btn btn-outline" name="action" value="REJECTED">Reject</button></form>
+{% endif %}
+<h2>Decision history</h2><ul>{% for item in requisition.approvals.all %}<li>{{ item.get_decision_display }} · {{ item.approver.full_name }} · {{ item.created_at }} · {{ item.approved_amount|default_if_none:'' }} {{ item.reason|default:'' }} {{ item.remarks|default:'' }}</li>{% empty %}<li>No decision recorded.</li>{% endfor %}</ul>
+</div>
+{% endblock %}

@@ -25,12 +25,12 @@
   <div class="app-container">
     <!-- Sidebar (Brand Navy #011345) -->
     <aside class="app-sidebar" id="appSidebar">
-      <div class="sidebar-header">
-        <a href="{% url 'core:dashboard' %}" class="sidebar-logo">
-          <img src="{% static 'img/tci_hlc-logo.png' %}" alt="TCI HLC Logo" style="width: 44px; height: 44px; object-fit: contain; display: block;">
+      <div class="sidebar-header" style="text-align: center; padding: 24px 16px 20px;">
+        <a href="{% url 'core:dashboard' %}" class="sidebar-logo" style="display: flex; flex-direction: column; align-items: center; text-align: center; text-decoration: none;">
+          <img src="{% static 'img/tci_hlc-logo.png' %}" alt="TCI Higher Life Center Logo" class="sidebar-logo-img" style="width: 68px; height: 68px; object-fit: contain; display: block; margin: 0 auto 12px auto;">
           <div>
-            <div class="sidebar-logo-text">TCI Higher Life Center</div>
-            <div class="sidebar-sublogo">Financial Management</div>
+            <div class="sidebar-logo-text" style="font-size: 16px; font-weight: 700; letter-spacing: 0.3px; color: #ffffff; text-align: center;">TCI Higher Life Center</div>
+            <div class="sidebar-sublogo" style="margin-top: 4px; color: #FEC313; font-size: 11px; letter-spacing: 0.8px; text-align: center;">Financial Management</div>
           </div>
         </a>
       </div>
@@ -53,20 +53,32 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Members
         </a>
-        <a href="/requisitions/" class="nav-link">
+        {% if user|has_perm:"requisition.view" %}
+        <a href="{% url 'requisitions:queue' %}" class="nav-link {% if request.resolver_match.app_name == 'requisitions' %}active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
           Requisitions
         </a>
+        {% endif %}
 
         <div class="nav-section-title">Administration</div>
-        <a href="/notifications/" class="nav-link">
+        {% if is_system_administrator or user|has_perm:"notification.view" %}
+        <a href="{% url 'notifications:notification_list' %}" class="nav-link {% if request.resolver_match.app_name == 'notifications' and 'template' not in request.resolver_match.url_name %}active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           Notifications
         </a>
-        <a href="/reports/" class="nav-link">
+        {% endif %}
+        {% if is_system_administrator or user|has_perm:"template.manage" %}
+        <a href="{% url 'notifications:template_list' %}" class="nav-link {% if 'template' in request.resolver_match.url_name %}active{% endif %}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          SMS Templates
+        </a>
+        {% endif %}
+        {% if user|has_perm:"report.view" %}
+        <a href="{% url 'reports:payment_summary' %}" class="nav-link {% if request.resolver_match.app_name == 'reports' or request.resolver_match.url_name == 'payment_summary' %}active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           Reports
         </a>
+        {% endif %}
 
         {% if is_system_administrator or user|has_perm:"user.manage" %}
         <a href="{% url 'accounts:user_list' %}" class="nav-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}">
@@ -76,7 +88,7 @@
         {% endif %}
 
         {% if is_system_administrator or user|has_perm:"audit.view" %}
-        <a href="/admin/audit/auditlog/" class="nav-link">
+        <a href="{% url 'audit:log_list' %}" class="nav-link {% if request.resolver_match.app_name == 'audit' %}active{% endif %}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Audit Logs
         </a>

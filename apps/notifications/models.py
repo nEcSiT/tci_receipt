@@ -91,6 +91,16 @@ class NotificationTemplate(UUIDBaseModel):
         verbose_name_plural = "Notification Templates"
         ordering = ["name"]
 
+    def clean(self):
+        super().clean()
+        if self.template_body:
+            from apps.notifications.services import NotificationTemplateService
+            NotificationTemplateService.validate_template_body(self.template_body)
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} ({self.notification_type})"
 

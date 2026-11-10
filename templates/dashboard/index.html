@@ -14,14 +14,6 @@
   </p>
 </div>
 
-{% if user|has_perm:"report.view" %}
-<div class="card">
-  <div class="card-header"><h2 class="card-title">Contribution reporting</h2></div>
-  <p>Compare received amounts by payment method, currency, contribution type and entry method.</p>
-  <a class="btn btn-primary" href="{% url 'core:payment_summary' %}">View payment breakdown</a>
-</div>
-{% endif %}
-
 <!-- 4 Summary Metric Cards (Section 11 & 15) -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 32px;">
   <!-- 1. Today's Contributions (Accent Green) -->
@@ -55,11 +47,24 @@
 
 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
   <!-- Left Column: Pending Actions & Workflows -->
-  <div>
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    <!-- Requisitions Workflow Queue -->
     <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">Pending Workflow Queue</h3>
-        <span class="badge badge-warning">{{ pending_req_count }} Active</span>
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 class="card-title">Pending Workflow Queue</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin: 3px 0 0 0;">
+            Review submitted requests and see the current handler.
+          </p>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="badge badge-warning">{{ pending_req_count }} Active</span>
+          {% if user|has_perm:"requisition.view" %}
+          <a class="btn btn-outline btn-sm" href="{% url 'requisitions:queue' %}">
+            Open Queue &rarr;
+          </a>
+          {% endif %}
+        </div>
       </div>
 
       {% if pending_requisitions %}
@@ -68,28 +73,88 @@
           <thead>
             <tr>
               <th>Tracking ID</th>
-              <th>Department</th>
+              <th>Purpose / Organization</th>
               <th>Amount</th>
+              <th>Current Handler</th>
               <th>Status</th>
+              {% if user|has_perm:"requisition.view" %}
+              <th style="text-align: right;">Action</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody>
             {% for req in pending_requisitions %}
+            {% with assignment=req.current_assignment %}
             <tr>
-              <td><strong>{{ req.requisition_id }}</strong></td>
-              <td>{{ req.department }}</td>
-              <td class="num-col">GHS {{ req.requested_amount|floatformat:2 }}</td>
+              <td>
+                {% if user|has_perm:"requisition.view" %}
+                  {% if not assignment or assignment.assigned_to_id == user.id %}
+                    <a href="{% url 'requisitions:detail' req.id %}" style="font-weight: 700; color: var(--brand-navy); text-decoration: none;">
+                      {{ req.requisition_number }}
+                    </a>
+                  {% else %}
+                    <strong>{{ req.requisition_number }}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted);">(locked)</span>
+                  {% endif %}
+                {% else %}
+                  <strong>{{ req.requisition_number }}</strong>
+                {% endif %}
+              </td>
+              <td>
+                <div style="font-weight: 600; color: var(--text-primary);">
+                  {{ req.purpose|default:"—"|truncatechars:32 }}
+                </div>
+                {% if req.department or req.ministry or req.team or req.group_name %}
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                  {{ req.department|default:req.ministry|default:req.team|default:req.group_name }}
+                </div>
+                {% endif %}
+              </td>
+              <td class="num-col" style="white-space: nowrap; font-weight: 600;">
+                GHS {{ req.amount_requested|floatformat:2 }}
+              </td>
+              <td>
+                {% if assignment %}
+                  <span class="badge badge-neutral" style="font-size: 11px;">
+                    {{ assignment.assigned_to.full_name|default:assignment.assigned_to.email }}
+                  </span>
+                {% else %}
+                  <span class="badge badge-warning" style="font-size: 11px;">Unassigned</span>
+                {% endif %}
+              </td>
               <td>
                 <span class="badge badge-warning">{{ req.get_status_display }}</span>
               </td>
+              {% if user|has_perm:"requisition.view" %}
+              <td style="text-align: right;">
+                {% if not assignment or assignment.assigned_to_id == user.id %}
+                  <a href="{% url 'requisitions:detail' req.id %}" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 12px;">
+                    Review
+                  </a>
+                {% else %}
+                  <span style="font-size: 12px; color: var(--text-muted);">In progress</span>
+                {% endif %}
+              </td>
+              {% endif %}
             </tr>
+            {% endwith %}
             {% endfor %}
           </tbody>
         </table>
       </div>
+      {% if user|has_perm:"requisition.view" %}
+      <div style="padding: 12px 18px; border-top: 1px solid var(--surface-subtle); text-align: right;">
+        <a href="{% url 'requisitions:queue' %}" style="font-size: 13px; font-weight: 600; color: var(--brand-navy); text-decoration: none;">
+          View full requisition queue &rarr;
+        </a>
+      </div>
+      {% endif %}
       {% else %}
       <div style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
-        <p style="font-size: 14px;">No pending requisitions requiring attention right now.</p>
+        <p style="font-size: 14px; margin-bottom: 10px;">No pending requisitions requiring attention right now.</p>
+        {% if user|has_perm:"requisition.view" %}
+        <a class="btn btn-outline btn-sm" href="{% url 'requisitions:queue' %}">Check All Requisitions</a>
+        {% endif %}
       </div>
       {% endif %}
     </div>
@@ -117,12 +182,40 @@
           + Add System User
         </a>
         {% endif %}
+
+        {% if user|has_perm:"report.view" %}
+        <a href="{% url 'core:payment_summary' %}" class="btn btn-outline btn-sm">
+          Contribution Reports
+        </a>
+        {% endif %}
+
+        {% if user|has_perm:"requisition.view" %}
+        <a href="{% url 'requisitions:queue' %}" class="btn btn-outline btn-sm">
+          Requisition Queue
+        </a>
+        {% endif %}
       </div>
     </div>
   </div>
 
-  <!-- Right Column: Recent Activity (Immutable Audit Trail) -->
-  <div>
+  <!-- Right Column: Contribution Reporting & Recent Activity -->
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    {% if user|has_perm:"report.view" %}
+    <div class="card">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 class="card-title">Contribution Reporting</h3>
+        <span class="badge badge-neutral">Analytics</span>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+        Compare received amounts by payment method, currency, contribution type and entry method.
+      </p>
+      <a class="btn btn-outline btn-sm" href="{% url 'core:payment_summary' %}" style="display: inline-block;">
+        View Payment Breakdown &rarr;
+      </a>
+    </div>
+    {% endif %}
+
+    <!-- Recent Activity (Immutable Audit Trail) -->
     <div class="card">
       <div class="card-header">
         <h3 class="card-title">Recent System Activity</h3>

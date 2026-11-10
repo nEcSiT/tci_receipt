@@ -46,6 +46,8 @@ class Command(BaseCommand):
             ("evidence.verify", "Verify Evidence", "Review and verify post-disbursement evidence"),
             ("report.view", "View Reports", "Access financial and administrative reports"),
             ("report.export", "Export Reports", "Download CSV, Excel, or PDF reports"),
+            ("notification.view", "View Notifications", "View system-wide SMS delivery history"),
+            ("template.manage", "Manage SMS Templates", "Create, edit, activate and deactivate SMS notification templates"),
             ("user.manage", "Manage Users", "Create and deactivate internal system users"),
             ("audit.view", "View Audit Logs", "Inspect immutable system audit trails"),
         ]
@@ -80,7 +82,19 @@ class Command(BaseCommand):
                 defaults={"description": desc, "is_active": True}
             )
             seed_types[name] = c_type
-        self.stdout.write(self.style.SUCCESS("✓ Contribution types seeded"))
+
+        # Check whether Offering and Welfare already exist before adding them; preserve Thanksgiving
+        new_types = [
+            ("Offering", "Regular offertory collected during church worship services"),
+            ("Welfare", "Contributions supporting member benevolent and welfare needs"),
+        ]
+        for name, desc in new_types:
+            c_type, _ = ContributionType.objects.get_or_create(
+                name=name,
+                defaults={"description": desc, "is_active": True}
+            )
+            seed_types[name] = c_type
+        self.stdout.write(self.style.SUCCESS("✓ Contribution types seeded (including Offering & Welfare)"))
 
         # 4. Seed the Exactly One System Administrator
         admin_email = settings.SYSTEM_ADMIN_EMAIL
@@ -122,42 +136,56 @@ class Command(BaseCommand):
                 "Tithe Thank You",
                 NotificationType.THANK_YOU,
                 seed_types.get("Tithe"),
-                "Dear {first_name}, thank you for honoring God with your Tithe of {amount} {currency}. The Lord open the windows of heaven and pour you out a blessing! — TCI Higher Life Center"
+                "Dear {first_name}, thank you for honoring God with your Tithe of {amount} {currency}. The Lord open the windows of heaven and pour you out a blessing! — TCI Higher Life Center Receipt: {receipt_number}. View: {secure_link}"
             ),
             (
                 "Thanksgiving Thank You",
                 NotificationType.THANK_YOU,
                 seed_types.get("Thanksgiving"),
-                "Dear {first_name}, thank you for your Thanksgiving offering of {amount} {currency}. May your life continuously overflow with praise and divine favor! — TCI Higher Life Center"
+                "Dear {first_name}, thank you for your Thanksgiving offering of {amount} {currency}. May your life continuously overflow with praise and divine favor! — TCI Higher Life Center Receipt: {receipt_number}. View: {secure_link}"
             ),
             (
                 "Higher Life Partners Thank You",
                 NotificationType.THANK_YOU,
                 seed_types.get("Higher Life Partners"),
-                "Dear {first_name}, thank you for partnering with Higher Life Center with your gift of {amount} {currency}. Together, we impact lives and expand the Kingdom! — TCI Higher Life Center"
+                "Dear {first_name}, thank you for partnering with Higher Life Center with your gift of {amount} {currency}. Together, we impact lives and expand the Kingdom! — TCI Higher Life Center Receipt: {receipt_number}. View: {secure_link}"
             ),
             (
                 "Building Project Thank You",
                 NotificationType.THANK_YOU,
                 seed_types.get("Building Project"),
-                "Dear {first_name}, thank you for building the House of the Lord with your contribution of {amount} {currency}. God establish and prosper you! — TCI Higher Life Center"
+                "Dear {first_name}, thank you for building the House of the Lord with your contribution of {amount} {currency}. God establish and prosper you! — TCI Higher Life Center Receipt: {receipt_number}. View: {secure_link}"
+            ),
+            (
+                "Offering Thank You",
+                NotificationType.THANK_YOU,
+                seed_types.get("Offering"),
+                "Dear {first_name}, thank you for your Offering of {amount} {currency} to TCI Higher Life Center. May the Lord bless and multiply the seeds you have sown! Receipt: {receipt_number}. View: {secure_link}"
+            ),
+            (
+                "Welfare Thank You",
+                NotificationType.THANK_YOU,
+                seed_types.get("Welfare"),
+                "Dear {first_name}, thank you for your Welfare contribution of {amount} {currency}. God bless you for caring for and strengthening the brethren! — TCI Higher Life Center Receipt: {receipt_number}. View: {secure_link}"
             ),
             (
                 "General Contribution Thank You",
                 NotificationType.THANK_YOU,
                 None,
-                "Dear {first_name}, thank you for your generous gift of {amount} {currency} to TCI Higher Life Center. God bless you abundantly!"
+                "Dear {first_name}, thank you for your generous gift of {amount} {currency} to TCI Higher Life Center. God bless you abundantly! Receipt: {receipt_number}. View: {secure_link}"
             ),
         ]
 
         for name, n_type, c_type, body in templates_data:
-            NotificationTemplate.objects.update_or_create(
+            NotificationTemplate.objects.get_or_create(
                 name=name,
                 defaults={
                     "notification_type": n_type,
                     "contribution_type": c_type,
                     "template_body": body,
-                    "is_active": True,
+                    "is_active": not NotificationTemplate.objects.filter(
+                        notification_type=n_type, contribution_type=c_type, is_active=True
+                    ).exists(),
                     "created_by": admin_user,
                 }
             )

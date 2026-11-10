@@ -167,7 +167,7 @@ def test_m6_bt_001_successful_automatic_payment_end_to_end(seed_data, member_wit
     assert "/receipts/access/" in notification.message
 
     # Verify SMS was dispatched via provider
-    assert len(setup_mock_sms.sent_messages) == 1
+    assert len(setup_mock_sms.sent_messages) == 2  # Receipt and thank-you SMS
     assert setup_mock_sms.sent_messages[0]["recipient_phone"] == "0241234567"
 
 
@@ -671,7 +671,7 @@ def test_m6_bt_018_provider_abstraction_swappable(seed_data):
     assert isinstance(sms_provider, MockSmsProvider)
 
 
-@override_settings(PAYMENT_WEBHOOK_SECRET="test-webhook-secret")
+@override_settings(DEBUG=True, PAYMENT_WEBHOOK_SECRET="test-webhook-secret")
 def test_m6_bt_019_api_and_ussd_gateway_endpoints(client, seed_data, member_with_phones):
     """
     Tests HTTP endpoints:
@@ -711,6 +711,19 @@ def test_m6_bt_019_api_and_ussd_gateway_endpoints(client, seed_data, member_with
     ussd_res1 = client.get(ussd_url, {"sessionId": "s1", "phoneNumber": "0241234567", "text": "1*175*1"})
     assert ussd_res1.status_code == 200
     assert ussd_res1.content.decode().startswith("END Payment prompt sent")
+
+    # Production USSD gateway authentication enforcement
+    with override_settings(DEBUG=False, USSD_GATEWAY_SECRET="test-ussd-secret"):
+        unauth_ussd = client.get(ussd_url, {"sessionId": "s1", "phoneNumber": "0241234567", "text": ""})
+        assert unauth_ussd.status_code == 401
+
+        ussd_sig = hmac.new(b"test-ussd-secret", b"", hashlib.sha256).hexdigest()
+        auth_ussd = client.get(
+            ussd_url,
+            {"sessionId": "s1", "phoneNumber": "0241234567", "text": ""},
+            HTTP_X_USSD_SIGNATURE=ussd_sig,
+        )
+        assert auth_ussd.status_code == 200
 
 
 def test_m6_bt_020_audit_and_traceability_chain(seed_data, member_with_phones):
