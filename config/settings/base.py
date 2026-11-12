@@ -26,6 +26,7 @@ env = environ.Env(
     PAYMENT_WEBHOOK_SECRET=(str, ""),
     USSD_GATEWAY_SECRET=(str, ""),
     RECEIPT_ACCESS_TOKEN_MAX_AGE=(int, 86400),
+    PUBLIC_APP_URL=(str, "https://portal.tcihlc.org"),
 )
 
 env_file = BASE_DIR / ".env"
@@ -38,6 +39,7 @@ REQUISITION_ACCESS_MAX_AGE = env.int("REQUISITION_ACCESS_MAX_AGE", default=30 * 
 REQUISITION_PRIVATE_STORAGE = BASE_DIR / "private_requisitions"
 REQUISITION_UPLOAD_MAX_BYTES = env.int("REQUISITION_UPLOAD_MAX_BYTES", default=5 * 1024 * 1024)
 REQUISITION_UPLOAD_MAX_COUNT = env.int("REQUISITION_UPLOAD_MAX_COUNT", default=10)
+PUBLIC_APP_URL = env("PUBLIC_APP_URL", default="https://portal.tcihlc.org")
 
 SECRET_KEY = env("SECRET_KEY")
 if not SECRET_KEY:

@@ -24,6 +24,12 @@ class MemberMergeStatus(models.TextChoices):
     REJECTED = "REJECTED", "Rejected"
 
 
+class ContributorLinkingStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    APPROVED = "APPROVED", "Approved"
+    REJECTED = "REJECTED", "Rejected"
+
+
 class Member(UUIDBaseModel):
     """
     Permanent church member entity.
@@ -216,3 +222,54 @@ class MemberMergeRequest(UUIDBaseModel):
 
     def __str__(self):
         return f"Merge {self.source_member} -> {self.target_member} [{self.status}]"
+
+
+class ContributorLinkingRequest(UUIDBaseModel):
+    """
+    Linking request to link an unverified temporary contributor to an existing church member.
+    Requires System Administrator approval.
+    Table: contributor_linking_requests
+    """
+    temporary_contributor = models.ForeignKey(
+        TemporaryContributor,
+        on_delete=models.CASCADE,
+        related_name="linking_requests"
+    )
+    target_member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name="contributor_linking_requests"
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="contributor_linking_requests_created"
+    )
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=30,
+        choices=ContributorLinkingStatus.choices,
+        default=ContributorLinkingStatus.PENDING,
+        db_index=True
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contributor_linking_requests_reviewed"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_remarks = models.TextField(null=True, blank=True)
+    has_phone_conflict = models.BooleanField(default=False)
+    phone_conflict_details = models.TextField(null=True, blank=True)
+    add_phone_on_approval = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "contributor_linking_requests"
+        verbose_name = "Contributor Linking Request"
+        verbose_name_plural = "Contributor Linking Requests"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Link {self.temporary_contributor.phone_number} -> {self.target_member.full_name} [{self.status}]"

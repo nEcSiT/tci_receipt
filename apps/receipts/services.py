@@ -113,7 +113,7 @@ class ReceiptDeliveryService:
 
         # Generate secure access link
         token = ReceiptService.generate_secure_access_token(receipt)
-        secure_link = f"/receipts/access/{token}/"
+        secure_link = ReceiptService.build_public_access_url(token)
 
         if not phone:
             # Record failed delivery due to missing phone; does NOT fail the contribution
@@ -346,7 +346,7 @@ class ReceiptService:
 
         # 3. Secure access link and template message rendering
         token = cls.generate_secure_access_token(receipt)
-        secure_link = f"/receipts/access/{token}/"
+        secure_link = cls.build_public_access_url(token)
 
         message, template = NotificationTemplateService.build_thank_you_message(
             first_name=first_name,
@@ -723,22 +723,55 @@ class ReceiptService:
         return signer.sign(str(receipt.id))
 
     @classmethod
+    def build_public_access_url(cls, token: str) -> str:
+        """
+        Builds a complete, trusted public application address for SMS receipt access.
+        Enforces HTTPS in production and prevents localhost addresses or relative paths
+        from being dispatched to external contributors.
+        """
+        base = getattr(settings, "PUBLIC_APP_URL", "")
+        if not base:
+            base = "https://portal.tcihlc.org"
+        base = base.strip().rstrip("/")
+        if not base.startswith("http://") and not base.startswith("https://"):
+            base = f"https://{base}"
+        # In non-DEBUG or production, force https
+        if not getattr(settings, "DEBUG", False) and base.startswith("http://"):
+            base = "https://" + base[len("http://"):]
+        return f"{base}/receipts/access/{token}/"
+
+    @classmethod
+    def resolve_access_token(cls, token: str) -> tuple[Receipt | None, str | None]:
+        """
+        Resolves receipt from secure access token, returning (receipt, error_code).
+        error_code can be None, "EXPIRED", "INVALID", or "NOT_FOUND".
+        """
+        signer = TimestampSigner(salt=cls.TOKEN_SALT)
+        max_age = getattr(settings, "RECEIPT_ACCESS_TOKEN_MAX_AGE", 86400)
+        try:
+            receipt_id = signer.unsign(token, max_age=max_age)
+        except SignatureExpired:
+            return None, "EXPIRED"
+        except (BadSignature, Exception):
+            return None, "INVALID"
+
+        receipt = Receipt.all_objects.filter(id=receipt_id).select_related(
+            "contribution__member",
+            "contribution__temporary_contributor",
+            "contribution__contribution_type",
+            "generated_by_user",
+        ).first()
+        if not receipt:
+            return None, "NOT_FOUND"
+        return receipt, None
+
+    @classmethod
     def get_receipt_by_access_token(cls, token: str) -> Receipt | None:
         """
         Resolves receipt from secure access token, checking cryptographic signature.
         """
-        signer = TimestampSigner(salt=cls.TOKEN_SALT)
-        try:
-            # Valid for up to 90 days
-            receipt_id = signer.unsign(token, max_age=getattr(settings, "RECEIPT_ACCESS_TOKEN_MAX_AGE", 86400))
-            return Receipt.all_objects.filter(id=receipt_id).select_related(
-                "contribution__member",
-                "contribution__temporary_contributor",
-                "contribution__contribution_type",
-                "generated_by_user",
-            ).first()
-        except (BadSignature, SignatureExpired):
-            return None
+        receipt, _ = cls.resolve_access_token(token)
+        return receipt
 
 
 class ReceiptRetryService:

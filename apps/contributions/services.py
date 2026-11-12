@@ -785,7 +785,7 @@ class AutomaticPaymentService:
         secure_link = ""
         if receipt:
             token = ReceiptService.generate_secure_access_token(receipt)
-            secure_link = f"/receipts/access/{token}/"
+            secure_link = ReceiptService.build_public_access_url(token)
 
         thank_you_message, template = NotificationTemplateService.build_thank_you_message(
             first_name=first_name,

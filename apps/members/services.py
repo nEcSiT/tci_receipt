@@ -7,16 +7,18 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.audit.models import AuditResult
 from apps.audit.services import AuditService
-from apps.core.utils.phone import get_phone_lookup_variants
+from apps.core.utils.phone import get_phone_lookup_variants, clean_phone_number
 from apps.contributions.models import Contribution
 from apps.members.models import (
     Member,
     MemberPhoneNumber,
     TemporaryContributor,
     MemberMergeRequest,
+    ContributorLinkingRequest,
     MemberStatus,
     TemporaryContributorStatus,
     MemberMergeStatus,
+    ContributorLinkingStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -433,6 +435,207 @@ class TemporaryContributorService:
 
     @classmethod
     @transaction.atomic
+    def request_linking(
+        cls,
+        actor: User,
+        temporary_contributor: TemporaryContributor,
+        target_member: Member,
+        reason: str,
+        add_phone: bool = True,
+    ) -> ContributorLinkingRequest:
+        """
+        Submits a request to link an unverified temporary contributor to an existing church member.
+        Ordinary authorized users submit requests; System Administrator approval is required.
+        Checks and flags active phone number conflicts without silently rewriting or skipping records.
+        Does NOT transfer contributions prior to approval.
+        """
+        if not actor.is_active or (not actor.is_system_administrator and not actor.has_permission("member.edit")):
+            raise ValidationError("You do not have permission to request linking for temporary contributors.")
+
+        if not reason or not reason.strip():
+            raise ValidationError("A clear reason for linking is required.")
+
+        # Lock temporary contributor to verify current state
+        tc = TemporaryContributor.objects.select_for_update().get(id=temporary_contributor.id)
+        if tc.status in [TemporaryContributorStatus.LINKED, TemporaryContributorStatus.CONVERTED]:
+            raise ValidationError("This temporary contributor has already been linked or converted.")
+
+        if target_member.status != MemberStatus.ACTIVE:
+            raise ValidationError("Contributions can only be linked to active church members.")
+
+        # Prevent duplicate pending linking request
+        existing_pending = ContributorLinkingRequest.objects.filter(
+            temporary_contributor=tc,
+            status=ContributorLinkingStatus.PENDING,
+        ).first()
+        if existing_pending:
+            raise ValidationError("A linking request for this contributor is already pending approval.")
+
+        # Phone conflict check: check if contributor phone belongs to ANY other active member
+        variants = get_phone_lookup_variants(tc.phone_number)
+        conflict = MemberPhoneNumber.objects.filter(
+            phone_number__in=variants,
+            is_active=True,
+        ).exclude(member=target_member).select_related("member").first()
+
+        has_conflict = False
+        conflict_details = ""
+        if conflict:
+            has_conflict = True
+            conflict_details = (
+                f"This phone number is already registered to another member: "
+                f"{conflict.member.full_name} ({conflict.member.member_number})."
+            )
+
+        req = ContributorLinkingRequest.objects.create(
+            temporary_contributor=tc,
+            target_member=target_member,
+            requested_by=actor,
+            reason=reason.strip(),
+            status=ContributorLinkingStatus.PENDING,
+            has_phone_conflict=has_conflict,
+            phone_conflict_details=conflict_details if has_conflict else "",
+            add_phone_on_approval=add_phone,
+        )
+
+        AuditService.log(
+            action="CONTRIBUTOR_LINKING_REQUESTED",
+            entity_type="ContributorLinkingRequest",
+            entity_id=req.id,
+            user=actor,
+            new_values={
+                "temporary_contributor_id": str(tc.id),
+                "target_member_id": str(target_member.id),
+                "has_phone_conflict": has_conflict,
+                "reason": reason.strip(),
+            },
+            result=AuditResult.SUCCESS,
+        )
+        return req
+
+    @classmethod
+    @transaction.atomic
+    def approve_linking(
+        cls,
+        actor: User,
+        linking_request: ContributorLinkingRequest,
+        review_remarks: str = "",
+    ) -> ContributorLinkingRequest:
+        """
+        Approves a contributor linking request.
+        Restricted STRICTLY to System Administrators (PRD 5.6 & prompt).
+        Transfers contributions atomically to target member without rewriting receipt numbers,
+        contribution IDs, amounts, payment references or dispatching duplicate thank-you SMS.
+        """
+        if not actor.is_active or not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator can approve contributor linking requests.")
+
+        req = ContributorLinkingRequest.objects.select_for_update().get(id=linking_request.id)
+        if req.status != ContributorLinkingStatus.PENDING:
+            raise ValidationError("This linking request has already been reviewed.")
+
+        tc = TemporaryContributor.objects.select_for_update().get(id=req.temporary_contributor_id)
+        if tc.status in [TemporaryContributorStatus.LINKED, TemporaryContributorStatus.CONVERTED]:
+            raise ValidationError("This contributor has already been linked or converted.")
+
+        target_member = req.target_member
+        reassigned_count = Contribution.objects.filter(
+            temporary_contributor=tc
+        ).update(
+            member=target_member,
+            temporary_contributor=None,
+        )
+
+        # Associate phone if requested and no conflict with another member
+        if req.add_phone_on_approval and not req.has_phone_conflict:
+            variants = get_phone_lookup_variants(tc.phone_number)
+            conflict = MemberPhoneNumber.objects.filter(
+                phone_number__in=variants,
+                is_active=True,
+            ).exclude(member=target_member).first()
+            if not conflict:
+                existing_on_target = MemberPhoneNumber.objects.filter(
+                    member=target_member,
+                    phone_number__in=variants,
+                ).first()
+                if not existing_on_target:
+                    has_active = MemberPhoneNumber.objects.filter(member=target_member, is_active=True).exists()
+                    MemberPhoneNumber.objects.create(
+                        member=target_member,
+                        phone_number=tc.phone_number,
+                        provider=tc.provider,
+                        is_primary=not has_active,
+                        is_active=True,
+                    )
+
+        tc.status = TemporaryContributorStatus.LINKED
+        tc.converted_member = target_member
+        tc.save(update_fields=["status", "converted_member", "updated_at"])
+
+        req.status = ContributorLinkingStatus.APPROVED
+        req.reviewed_by = actor
+        req.reviewed_at = timezone.now()
+        req.review_remarks = review_remarks.strip() if review_remarks else ""
+        req.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_remarks", "updated_at"])
+
+        AuditService.log(
+            action="CONTRIBUTOR_LINKING_APPROVED",
+            entity_type="ContributorLinkingRequest",
+            entity_id=req.id,
+            user=actor,
+            new_values={
+                "temporary_contributor_id": str(tc.id),
+                "target_member_id": str(target_member.id),
+                "reassigned_contributions_count": reassigned_count,
+                "review_remarks": req.review_remarks,
+            },
+            result=AuditResult.SUCCESS,
+        )
+        return req
+
+    @classmethod
+    @transaction.atomic
+    def reject_linking(
+        cls,
+        actor: User,
+        linking_request: ContributorLinkingRequest,
+        review_remarks: str = "",
+    ) -> ContributorLinkingRequest:
+        """
+        Rejects a contributor linking request.
+        Restricted STRICTLY to System Administrators.
+        Does NOT transfer contributions; temporary contributor remains intact.
+        """
+        if not actor.is_active or not actor.is_system_administrator:
+            raise ValidationError("Only the System Administrator can reject contributor linking requests.")
+
+        req = ContributorLinkingRequest.objects.select_for_update().get(id=linking_request.id)
+        if req.status != ContributorLinkingStatus.PENDING:
+            raise ValidationError("This linking request has already been reviewed.")
+
+        req.status = ContributorLinkingStatus.REJECTED
+        req.reviewed_by = actor
+        req.reviewed_at = timezone.now()
+        req.review_remarks = review_remarks.strip() if review_remarks else ""
+        req.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_remarks", "updated_at"])
+
+        AuditService.log(
+            action="CONTRIBUTOR_LINKING_REJECTED",
+            entity_type="ContributorLinkingRequest",
+            entity_id=req.id,
+            user=actor,
+            new_values={
+                "temporary_contributor_id": str(req.temporary_contributor_id),
+                "target_member_id": str(req.target_member_id),
+                "reason": req.reason,
+                "review_remarks": req.review_remarks,
+            },
+            result=AuditResult.SUCCESS,
+        )
+        return req
+
+    @classmethod
+    @transaction.atomic
     def link_to_member(
         cls,
         actor: User,
@@ -443,13 +646,18 @@ class TemporaryContributorService:
         """
         Links an unverified temporary contributor to an existing permanent member.
         Reassigns all contributions and optionally associates the phone number.
+        Preserves backward compatibility while enforcing concurrency locking and audit trails.
         """
         if not actor.is_active or (not actor.is_system_administrator and not actor.has_permission("member.edit")):
             raise ValidationError("You do not have permission to link temporary contributors.")
 
+        tc = TemporaryContributor.objects.select_for_update().get(id=temporary_contributor.id)
+        if tc.status in [TemporaryContributorStatus.LINKED, TemporaryContributorStatus.CONVERTED]:
+            raise ValidationError("This temporary contributor has already been linked or converted.")
+
         # Reassign historical contributions
         reassigned_count = Contribution.objects.filter(
-            temporary_contributor=temporary_contributor
+            temporary_contributor=tc
         ).update(
             member=target_member,
             temporary_contributor=None,
@@ -457,33 +665,34 @@ class TemporaryContributorService:
 
         # Optionally add the phone number to target member if not conflicting
         if add_phone:
+            variants = get_phone_lookup_variants(tc.phone_number)
             conflict = MemberPhoneNumber.objects.filter(
-                phone_number=temporary_contributor.phone_number,
+                phone_number__in=variants,
                 is_active=True,
             ).exclude(member=target_member).first()
             if not conflict:
                 existing_member_phone = MemberPhoneNumber.objects.filter(
                     member=target_member,
-                    phone_number=temporary_contributor.phone_number,
+                    phone_number__in=variants,
                 ).first()
                 if not existing_member_phone:
                     has_active = MemberPhoneNumber.objects.filter(member=target_member, is_active=True).exists()
                     MemberPhoneNumber.objects.create(
                         member=target_member,
-                        phone_number=temporary_contributor.phone_number,
-                        provider=temporary_contributor.provider,
+                        phone_number=tc.phone_number,
+                        provider=tc.provider,
                         is_primary=not has_active,
                         is_active=True,
                     )
 
-        temporary_contributor.status = TemporaryContributorStatus.LINKED
-        temporary_contributor.converted_member = target_member
-        temporary_contributor.save(update_fields=["status", "converted_member", "updated_at"])
+        tc.status = TemporaryContributorStatus.LINKED
+        tc.converted_member = target_member
+        tc.save(update_fields=["status", "converted_member", "updated_at"])
 
         AuditService.log(
             action="TEMPORARY_CONTRIBUTOR_LINKED",
             entity_type="TemporaryContributor",
-            entity_id=temporary_contributor.id,
+            entity_id=tc.id,
             user=actor,
             new_values={
                 "target_member_id": str(target_member.id),
@@ -491,7 +700,7 @@ class TemporaryContributorService:
             },
             result=AuditResult.SUCCESS,
         )
-        return temporary_contributor
+        return tc
 
     @classmethod
     @transaction.atomic
@@ -510,9 +719,29 @@ class TemporaryContributorService:
         """
         Converts a temporary contributor into a new permanent member.
         Reassigns all contributions to the newly created member.
+        Enforces:
+        - select_for_update locking against concurrent requests
+        - check normalized phone numbers for existing membership before creating member
+        - client-facing phone conflict messaging
+        - preserves original temporary record, receipts, and audit history
         """
         if not actor.is_active or (not actor.is_system_administrator and not actor.has_permission("member.create")):
             raise ValidationError("You do not have permission to convert temporary contributors.")
+
+        tc = TemporaryContributor.objects.select_for_update().get(id=temporary_contributor.id)
+        if tc.status in [TemporaryContributorStatus.CONVERTED, TemporaryContributorStatus.LINKED]:
+            raise ValidationError("This temporary contributor has already been registered or linked.")
+
+        # Check normalized phone numbers for existing active membership
+        variants = get_phone_lookup_variants(tc.phone_number)
+        phone_conflict = MemberPhoneNumber.objects.filter(
+            phone_number__in=variants,
+            is_active=True,
+        ).first()
+        if phone_conflict:
+            raise ValidationError(
+                "This phone number is already registered to another member. Please review the existing member."
+            )
 
         new_member = MemberService.create_member(
             creator=actor,
@@ -523,26 +752,26 @@ class TemporaryContributorService:
             ministry=ministry,
             team=team,
             department=department,
-            phone_number=temporary_contributor.phone_number,
-            phone_provider=temporary_contributor.provider,
+            phone_number=tc.phone_number,
+            phone_provider=tc.provider,
             is_primary_phone=True,
         )
 
         reassigned_count = Contribution.objects.filter(
-            temporary_contributor=temporary_contributor
+            temporary_contributor=tc
         ).update(
             member=new_member,
             temporary_contributor=None,
         )
 
-        temporary_contributor.status = TemporaryContributorStatus.CONVERTED
-        temporary_contributor.converted_member = new_member
-        temporary_contributor.save(update_fields=["status", "converted_member", "updated_at"])
+        tc.status = TemporaryContributorStatus.CONVERTED
+        tc.converted_member = new_member
+        tc.save(update_fields=["status", "converted_member", "updated_at"])
 
         AuditService.log(
             action="TEMPORARY_CONTRIBUTOR_CONVERTED",
             entity_type="TemporaryContributor",
-            entity_id=temporary_contributor.id,
+            entity_id=tc.id,
             user=actor,
             new_values={
                 "new_member_id": str(new_member.id),

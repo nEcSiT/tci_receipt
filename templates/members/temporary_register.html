@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Register Contributor as Member — TCI Higher Life Center{% endblock %}
+{% block page_title %}Register Member from Contributor{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<a href="{% url 'members:temporary_list' %}">Temporary Contributors</a> &rsaquo;
+<a href="{% url 'members:temporary_review' tc.id %}">{{ tc.phone_number }}</a> &rsaquo;
+<strong>Register as Member</strong>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 780px; margin: 0 auto;">
+  <div class="card" style="padding: 32px;">
+    <!-- Title & Description -->
+    <div style="margin-bottom: 24px;">
+      <h2 style="font-size: 22px; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
+        Register New Church Member
+      </h2>
+      <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+        Convert temporary contributor record <code>{{ tc.phone_number }}</code> into a permanent verified church member profile.
+      </p>
+    </div>
+
+    <!-- Confirmation Callout (PRD §5.5) -->
+    <div class="card" style="margin-bottom: 24px; padding: 18px 20px; border-left: 4px solid var(--color-orange); background: rgba(241, 104, 34, 0.06);">
+      <div style="font-size: 14px; font-weight: 700; color: var(--navy-dark); margin-bottom: 4px;">
+        Automatic Association Confirmation
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+        Previous contributions (<strong>{{ contributions_count }} contribution{{ contributions_count|pluralize }}</strong> totaling <strong>GHS {{ total_amount|floatformat:2 }}</strong>) will appear under the new member. The original temporary record and financial audit trail will remain intact.
+      </div>
+    </div>
+
+    <!-- Provider-Supplied Hint Card (Do not assume verified identity) -->
+    {% if tc.provider_name %}
+    <div class="card" style="margin-bottom: 24px; padding: 16px 20px; background: rgba(43, 114, 186, 0.05); border: 1px solid rgba(43, 114, 186, 0.2);">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: var(--color-blue); margin-bottom: 4px;">
+        Payer Name from Payment Gateway: <strong>{{ tc.provider_name }}</strong>
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary);">
+        Please confirm full legal name with the contributor. Do not assume payment-provider names represent verified identity.
+      </div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-danger" style="margin-bottom: 24px; padding: 14px 18px; display: flex; align-items: center; gap: 10px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'members:temporary_register' tc.id %}">
+      {% csrf_token %}
+
+      <!-- Name Fields -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            First Name <span style="color: var(--color-orange);">*</span>
+          </label>
+          <input type="text" name="first_name" required value="{{ form_data.first_name|default:prefill_first }}" class="form-control" placeholder="e.g. Kwame">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Middle Name <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="text" name="middle_name" value="{{ form_data.middle_name|default:'' }}" class="form-control" placeholder="e.g. Kofi">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Last Name <span style="color: var(--color-orange);">*</span>
+          </label>
+          <input type="text" name="last_name" required value="{{ form_data.last_name|default:prefill_last }}" class="form-control" placeholder="e.g. Mensah">
+        </div>
+      </div>
+
+      <!-- Contact Fields -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Primary Phone Number
+          </label>
+          <input type="text" disabled value="{{ tc.phone_number }}" class="form-control" style="background: rgba(0,0,0,0.03); font-weight: 700; font-family: monospace;">
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            Automatically assigned as this member's primary active phone number.
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Email Address <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="email" name="email" value="{{ form_data.email|default:'' }}" class="form-control" placeholder="e.g. member@example.com">
+        </div>
+      </div>
+
+      <!-- Ministry Fields -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 28px;">
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Ministry <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="text" name="ministry" value="{{ form_data.ministry|default:'' }}" class="form-control" placeholder="e.g. Men of Faith">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Team <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="text" name="team" value="{{ form_data.team|default:'' }}" class="form-control" placeholder="e.g. Choir">
+        </div>
+        <div>
+          <label class="form-label" style="display: block; font-weight: 600; margin-bottom: 6px;">
+            Department <span style="font-weight: 400; color: var(--text-muted);">(optional)</span>
+          </label>
+          <input type="text" name="department" value="{{ form_data.department|default:'' }}" class="form-control" placeholder="e.g. Media">
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+        <a href="{% url 'members:temporary_review' tc.id %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary" style="padding-left: 24px; padding-right: 24px;">
+          Confirm Registration & Associate History
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

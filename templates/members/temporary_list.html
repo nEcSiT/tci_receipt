@@ -18,9 +18,14 @@
       Unverified records automatically created from digital payments when the transaction phone number does not match any registered church member.
     </p>
   </div>
-  <a href="{% url 'members:member_list' %}" class="btn btn-outline">
-    &larr; Back to Member Directory
-  </a>
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="{% url 'members:linking_request_list' %}" class="btn btn-outline">
+      Linking Requests
+    </a>
+    <a href="{% url 'members:member_list' %}" class="btn btn-outline">
+      &larr; Back to Member Directory
+    </a>
+  </div>
 </div>
 
 <!-- Filters Bar -->
@@ -102,25 +107,25 @@
         </td>
         <td style="text-align: right;">
           {% if tc.status == 'UNVERIFIED' or tc.status == 'UNDER_REVIEW' %}
-          <div style="display: inline-flex; gap: 8px; justify-content: flex-end;">
-            {% if tc.status == 'UNVERIFIED' %}
-            <form method="post" action="{% url 'members:temporary_action' tc.id %}" style="display: inline;">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="under_review">
-              <button type="submit" class="btn btn-outline btn-sm">Review</button>
-            </form>
-            {% endif %}
-
-            <!-- Link Trigger Button -->
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('linkModal-{{ tc.id }}').style.display='block'">
+          <div style="display: inline-flex; gap: 8px; justify-content: flex-end; align-items: center;">
+            <a href="{% url 'members:temporary_review' tc.id %}" class="btn btn-outline btn-sm">
+              Review
+            </a>
+            <a href="{% url 'members:temporary_link' tc.id %}" class="btn btn-outline btn-sm">
               Link
-            </button>
-
-            <!-- Convert Trigger Button -->
-            <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('convertModal-{{ tc.id }}').style.display='block'">
-              Convert
-            </button>
+            </a>
+            <a href="{% url 'members:temporary_register' tc.id %}" class="btn btn-primary btn-sm">
+              Register Member
+            </a>
           </div>
+          {% else %}
+          <div style="display: inline-flex; gap: 8px; justify-content: flex-end; align-items: center;">
+            <a href="{% url 'members:temporary_review' tc.id %}" class="btn btn-outline btn-sm">
+              View History
+            </a>
+          </div>
+          {% endif %}
+        </td>
 
           <!-- Link Modal -->
           <div id="linkModal-{{ tc.id }}" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
