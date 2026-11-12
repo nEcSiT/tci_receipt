@@ -4,9 +4,9 @@
 
 **Organization:** TCI Higher Life Center  
 **Document Type:** Product Requirements Document  
-**Version:** 1.0  
-**Status:** Requirements Consolidated  
-**Date:** September 2026
+**Version:** 1.1
+**Status:** Baseline plus approved stakeholder additions; implementation status below
+**Date:** 12 November 2026 (original baseline: September 2026)
 
 ---
 
@@ -1623,3 +1623,117 @@ Members & Contributors
 
 The product's central requirement is that every important financial or administrative event must be **accurately recorded, traceable, secure, and historically preserved**.
 
+
+---
+
+# 30. Approved clarifications and release status — 12 November 2026
+
+This section records subsequent stakeholder decisions and clarifications. It takes
+precedence where the original baseline differs. A requirement is not a claim that
+its implementation is complete.
+
+## 30.1 Notifications and receipt access
+
+- Both successful manual and automatic contributions require personalized thank-you
+  SMS. Manual receipt generation triggers its contribution's thank-you SMS once;
+  viewing, downloading or editing a receipt must not send another thank-you.
+- Authorized staff can open notification history and read the exact saved message.
+  Template edits affect future messages only. The detail view is read-only.
+- Thank-you wording is configurable by contribution category, including Tithe,
+  Offering and Welfare, with a generic fallback.
+- For unmatched automatic contributions, use the current transaction's available
+  provider-supplied name to personalize the SMS, and send to the transaction phone.
+  Names must never override phone-based identity matching.
+- View receipt opens a readable receipt. Download PDF downloads the official PDF.
+  Both functions must work for manual and automatic contributions, including those
+  from temporary contributors. SMS links must be complete public secure URLs.
+- A valid signed receipt link permits access to that receipt without a staff account.
+  Staff access continues to enforce receipt permissions. Invalid, expired or revoked
+  links must fail safely with understandable guidance.
+- Receipt viewing and member linking must not silently rewrite issued documents.
+  Keep phone numbers off the receipt itself and preserve identifiers and audit history.
+
+## 30.2 Temporary contributors and client-facing design
+
+- Provide clear Review contributor, Register as a new member and Link to an existing
+  member actions. Retain an Unverified state until the authorized process completes.
+- Linking requires System Administrator approval, a reason and an audit trail.
+  Registration and linking must preserve financial history and detect phone conflicts.
+- Follow TCI-HLC-design.md, especially receipt, notification, member, system-message
+  and accessibility guidance. Use client-understandable wording; technical identifiers,
+  gateway errors and storage details must not be the primary explanation.
+
+## 30.3 Other retained stakeholder boundaries
+
+- The shepherding tracker is excluded from this project; its earlier inclusion was an error.
+- Peer document editing is requested by the originating user. A reviewer is limited to
+  editing the requested document, not receiving unrelated administrative powers.
+- Proactive system-administrator incident alerts are reserved for sensitive security
+  incidents (such as breaches or brute-force activity) and major system errors.
+  Routine contributor receipts and transactional SMS remain required. Operational
+  records and manual follow-up items remain auditable without becoming blanket alerts.
+
+## 30.4 Verified source-control baseline
+
+As checked on 12 November 2026, main at 85e115a already includes:
+- PR #26: feature-branch consolidation, including receipt/payment foundations.
+- PR #35: notification details and manual thank-you SMS.
+- PR #36: temporary contributor registration/linking and receipt access changes.
+
+These are source-control facts, not evidence of a live deployment or full product
+acceptance. M7 remains staged: reassignment, payouts, expenditure evidence,
+verification and closure are not declared complete by this release.
+
+The legacy collab/reginaselasi branch is not part of this release. Its remaining
+changes include a malformed Python import; its protected-role logic is already
+represented on main. It must not be blindly merged into production.
+
+# 31. Next phase — bulk contribution recording and welfare
+
+Status: stakeholder-approved scope; implementation pending. This phase follows
+consolidation of the current work into main. Normal development PRs continue to
+use feature-branch; the 12 November main merge authorization is a release exception.
+
+## 31.1 Bulk contribution recording
+
+Authorized staff must be able to record multiple contributors' payments in one
+bulk-entry workflow. Each identifiable contributor's payment remains an individual
+contribution with its own receipt and contribution-category thank-you behavior.
+A batch is not one combined receipt that hides individual contributors.
+
+Preserve existing member selection, permissions, amount/date/category validation,
+unique receipt numbering, audit trails and notification failure independence.
+Users must be able to review the entries and understand validation errors before
+final submission. Repeated submission must not duplicate contributions, receipts or SMS.
+
+## 31.2 Welfare contributions and receipts
+
+Authorized staff must be able to record welfare contributions and issue receipts
+for them. Welfare is already a contribution category; extend existing contribution,
+receipt and configurable Welfare thank-you services rather than create an unrelated
+receipt numbering system.
+
+Support viewing welfare participants from the church database and identifying who
+has paid for a selected month or year. Preserve member contribution and receipt history.
+The coverage period and actual payment date must be distinguishable when they differ.
+
+## 31.3 Decisions to settle before implementation
+
+The following choices are not yet approved requirements:
+- Bulk entry method: on-screen multi-row entry, spreadsheet import, or both.
+- Whether a batch may mix categories and payment dates.
+- Whole-batch rejection versus explicit acceptance of valid rows when some rows fail.
+- Welfare membership/enrolment rules and any fixed dues amount or payment frequency.
+- Whether paid means any contribution or settlement of a defined amount due; do not
+  label people unpaid or in arrears using an invented dues rule.
+- Allocation of annual, advance, partial and catch-up payments across coverage periods.
+- Whether one welfare payment covering multiple periods receives one receipt with
+  coverage details, or another expressly approved presentation.
+
+## 31.4 Definition of completion
+
+The phase is complete only when the agreed workflows are implemented, receipts can
+be viewed and downloaded, welfare month/year filters use the agreed payment rules,
+permissions and duplicate prevention are tested, and desktop/mobile screens follow
+TCI-HLC-design.md. Keep this PRD updated in the same PR as each requirement change;
+record approved, implemented and pending items distinctly.
