@@ -141,6 +141,13 @@ class Notification(UUIDBaseModel):
         verbose_name = "Notification"
         verbose_name_plural = "Notifications"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["related_record_type", "related_record_id", "notification_type"],
+                condition=models.Q(notification_type="THANK_YOU", related_record_type="Contribution"),
+                name="unique_thank_you_per_contribution",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.notification_type} -> {self.recipient_phone} [{self.status}]"

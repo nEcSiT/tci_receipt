@@ -1,7 +1,7 @@
 import datetime
 import logging
 from decimal import Decimal, InvalidOperation
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.template.loader import render_to_string
@@ -215,7 +215,13 @@ class ReceiptService:
         If a receipt already exists, returns the existing record.
         Creates PDF, securely stores it, and records audit trail.
         For automatic contributions, dispatches SMS delivery.
+        For manual contributions, dispatches personalized thank-you SMS upon generation.
         """
+        # Concurrency protection: lock contribution row
+        locked_contribution = Contribution.objects.select_for_update().filter(id=contribution.id).first()
+        if locked_contribution:
+            contribution = locked_contribution
+
         # If receipt already exists, return it
         existing = Receipt.all_objects.filter(contribution=contribution).first()
         if existing:
@@ -280,8 +286,180 @@ class ReceiptService:
         # If automatic receipt, trigger automatic receipt delivery
         if is_auto:
             ReceiptDeliveryService.dispatch_automatic_receipt(receipt)
+        else:
+            cls.dispatch_manual_thank_you_sms(receipt, actor=actor or gen_user)
 
         return receipt
+
+    @classmethod
+    def dispatch_manual_thank_you_sms(
+        cls,
+        receipt: Receipt,
+        actor: User | None = None,
+    ) -> Notification | None:
+        """
+        Triggers the personalized thank-you SMS for manual contributions upon receipt generation.
+        Workflow:
+        1. Resolve contributor name and active phone:
+           - Use selected member's first name.
+           - Active primary phone, falling back deterministically to another active phone.
+           - Normalize and validate phone.
+        2. Render personalized message using active category template (Tithe, Offering, Welfare,
+           or generic fallback) with all supported variables.
+        3. Prevent duplicates: database-backed protection via select_for_update and unique constraint.
+        4. Persist one pending THANK_YOU notification in DB before dispatch.
+        5. Dispatch via SMS provider after database transaction commits (on_commit).
+        6. Failures (missing phone, gateway timeout/error) do not undo contribution or receipt.
+        7. Retries retain original wording up to 3 attempts.
+        """
+        contribution = receipt.contribution
+        member = contribution.member
+
+        # Check if THANK_YOU notification already exists for this contribution
+        existing = Notification.objects.filter(
+            related_record_type="Contribution",
+            related_record_id=contribution.id,
+            notification_type=NotificationType.THANK_YOU,
+        ).first()
+        if existing:
+            return existing
+
+        from apps.core.utils.phone import clean_phone_number, validate_phone_number
+        from apps.notifications.models import NotificationAttempt
+        from apps.notifications.services import NotificationService, NotificationTemplateService
+
+        # 1. First name resolution
+        first_name = member.first_name if member else None
+        if not first_name and contribution.temporary_contributor:
+            first_name = contribution.temporary_contributor.first_name
+
+        # 2. Recipient phone resolution: active primary phone, falling back deterministically
+        raw_phone = None
+        if member:
+            primary_phone = member.phone_numbers.filter(is_active=True, is_primary=True).first()
+            if not primary_phone:
+                primary_phone = member.phone_numbers.filter(is_active=True).order_by("created_at", "id").first()
+            if primary_phone:
+                raw_phone = primary_phone.phone_number
+        elif contribution.temporary_contributor and contribution.temporary_contributor.phone_number:
+            raw_phone = contribution.temporary_contributor.phone_number
+
+        # 3. Secure access link and template message rendering
+        token = cls.generate_secure_access_token(receipt)
+        secure_link = f"/receipts/access/{token}/"
+
+        message, template = NotificationTemplateService.build_thank_you_message(
+            first_name=first_name,
+            amount=contribution.amount,
+            currency=contribution.currency,
+            contribution_type_name=contribution.contribution_type.name,
+            receipt_number=receipt.receipt_number,
+            date_str=contribution.contribution_date.strftime("%d %b %Y"),
+            secure_link=secure_link,
+            contribution_type=contribution.contribution_type,
+        )
+
+        recipient_display_name = (
+            member.full_name if member
+            else (receipt.contributor_name or "Contributor")
+        )
+
+        # 4. Normalize and validate phone
+        normalized_phone = clean_phone_number(raw_phone) if raw_phone else ""
+        is_valid_phone = validate_phone_number(normalized_phone)
+
+        if not raw_phone or not is_valid_phone:
+            # Missing or invalid phone: Record delivery failure without undoing contribution or receipt
+            fail_reason = (
+                "No valid recipient phone number associated with contributor record."
+                if not raw_phone
+                else f"Invalid recipient phone number format: '{raw_phone}'."
+            )
+            try:
+                with transaction.atomic():
+                    notification = Notification.objects.create(
+                        notification_type=NotificationType.THANK_YOU,
+                        recipient_name=recipient_display_name,
+                        recipient_phone=normalized_phone or "UNKNOWN",
+                        related_record_type="Contribution",
+                        related_record_id=contribution.id,
+                        channel="SMS",
+                        template=template,
+                        message=message,
+                        status=NotificationStatus.FAILED,
+                        attempt_count=1,
+                        failure_reason=fail_reason,
+                    )
+                    NotificationAttempt.objects.create(
+                        notification=notification,
+                        attempt_number=1,
+                        status="FAILED",
+                        failure_code="ERR_INVALID_PHONE",
+                        failure_reason=fail_reason,
+                    )
+                    AuditService.log(
+                        action="NOTIFICATION_FAILED",
+                        entity_type="Notification",
+                        entity_id=notification.id,
+                        user=actor,
+                        new_values={
+                            "notification_type": notification.notification_type,
+                            "recipient_phone": notification.recipient_phone,
+                            "status": NotificationStatus.FAILED,
+                            "failure_code": "ERR_INVALID_PHONE",
+                            "failure_reason": fail_reason,
+                        },
+                        result=AuditResult.FAILURE,
+                    )
+                    logger.warning(
+                        "Manual thank-you SMS delivery failed for contribution %s: %s",
+                        contribution.contribution_number,
+                        fail_reason,
+                    )
+                    return notification
+            except IntegrityError:
+                return Notification.objects.filter(
+                    related_record_type="Contribution",
+                    related_record_id=contribution.id,
+                    notification_type=NotificationType.THANK_YOU,
+                ).first()
+
+        # 5. Persist pending notification with database-backed duplicate protection
+        try:
+            with transaction.atomic():
+                notification = Notification.objects.create(
+                    notification_type=NotificationType.THANK_YOU,
+                    recipient_name=recipient_display_name,
+                    recipient_phone=normalized_phone,
+                    related_record_type="Contribution",
+                    related_record_id=contribution.id,
+                    channel="SMS",
+                    template=template,
+                    message=message,
+                    status=NotificationStatus.PENDING,
+                    attempt_count=0,
+                )
+        except IntegrityError:
+            # Concurrently created by duplicate request
+            return Notification.objects.filter(
+                related_record_type="Contribution",
+                related_record_id=contribution.id,
+                notification_type=NotificationType.THANK_YOU,
+            ).first()
+
+        # 6. Dispatch through existing SMS provider strictly after database transaction commits
+        def _dispatch_after_commit():
+            try:
+                NotificationService.dispatch_notification(notification.id, actor=actor)
+            except Exception as e:
+                logger.error(
+                    "Error during after-commit dispatch for notification %s: %s",
+                    notification.id,
+                    e,
+                )
+
+        transaction.on_commit(_dispatch_after_commit)
+        return notification
 
     @classmethod
     @transaction.atomic
