@@ -1694,46 +1694,109 @@ Status: stakeholder-approved scope; implementation pending. This phase follows
 consolidation of the current work into main. Normal development PRs continue to
 use feature-branch; the 12 November main merge authorization is a release exception.
 
-## 31.1 Bulk contribution recording
+## 31.1 Approved bulk contribution workflow
 
-Authorized staff must be able to record multiple contributors' payments in one
-bulk-entry workflow. Each identifiable contributor's payment remains an individual
-contribution with its own receipt and contribution-category thank-you behavior.
-A batch is not one combined receipt that hides individual contributors.
+Provide both on-screen multi-row entry and Excel upload. Both methods support
+ordinary church contributions and Welfare through the same contribution system.
+Each payment remains an individual contribution with its own receipt and
+category-specific thank-you SMS. A batch is not a combined receipt.
 
-Preserve existing member selection, permissions, amount/date/category validation,
-unique receipt numbering, audit trails and notification failure independence.
-Users must be able to review the entries and understand validation errors before
-final submission. Repeated submission must not duplicate contributions, receipts or SMS.
+Check the existing member database before creating records. Use existing member
+selection and identification rules, including normalized phone matching. Never
+identify someone by name alone. Where no member exists, provide member creation
+within the reviewed workflow using existing required fields and permissions.
+Missing or conflicting identity details must be corrected rather than creating
+guessed or duplicate members. Do not silently overwrite an existing member.
 
-## 31.2 Welfare contributions and receipts
+Both workflows require a review step showing valid rows, proposed new members,
+conflicts and understandable row-level errors before final confirmation. Preserve
+financial validation, audit trails and notification failure independence.
+Repeated submission must not duplicate members, contributions, receipts or SMS.
 
-Authorized staff must be able to record welfare contributions and issue receipts
-for them. Welfare is already a contribution category; extend existing contribution,
-receipt and configurable Welfare thank-you services rather than create an unrelated
-receipt numbering system.
+## 31.2 Excel member database import
 
-Support viewing welfare participants from the church database and identifying who
-has paid for a selected month or year. Preserve member contribution and receipt history.
-The coverage period and actual payment date must be distinguishable when they differ.
+Provide a separate Excel import for member registration, in addition to contribution
+uploads. Supply a downloadable template with documented column names, required and
+optional fields, example rows and phone formatting guidance. Use existing member
+fields and validation; preserve phone numbers as text, including leading zeroes.
+The exact column schema is an implementation deliverable, not a pre-approved schema.
 
-## 31.3 Decisions to settle before implementation
+Preview before saving; detect duplicate rows, existing members and phone conflicts.
+Create only genuinely new members through the existing authorized service.
+Conflicts require resolution, not silent replacement. Re-uploading the same data
+must not duplicate members. Member-only imports must not create contributions,
+receipts or payment SMS.
 
-The following choices are not yet approved requirements:
-- Bulk entry method: on-screen multi-row entry, spreadsheet import, or both.
-- Whether a batch may mix categories and payment dates.
-- Whole-batch rejection versus explicit acceptance of valid rows when some rows fail.
-- Welfare membership/enrolment rules and any fixed dues amount or payment frequency.
-- Whether paid means any contribution or settlement of a defined amount due; do not
-  label people unpaid or in arrears using an invented dues rule.
-- Allocation of annual, advance, partial and catch-up payments across coverage periods.
-- Whether one welfare payment covering multiple periods receives one receipt with
-  coverage details, or another expressly approved presentation.
+## 31.3 Welfare amounts, coverage and receipts
 
-## 31.4 Definition of completion
+Welfare has no fixed required amount. Record the actual positive payment received.
+Do not impose a monthly rate, calculate a debt or invent arrears/underpayment labels.
 
-The phase is complete only when the agreed workflows are implemented, receipts can
-be viewed and downloaded, welfare month/year filters use the agreed payment rules,
-permissions and duplicate prevention are tested, and desktop/mobile screens follow
-TCI-HLC-design.md. Keep this PRD updated in the same PR as each requirement change;
-record approved, implemented and pending items distinctly.
+Allow a year and one or more individual months to be selected, including future
+months. Provide Select whole year to select all twelve months. Store explicit
+months and years, not merely a number of months. Keep the payment date separate
+from the periods covered and show the selected periods before confirmation.
+
+Issue one receipt per member payment, listing the welfare months/year covered.
+A payment covering multiple months or a whole year does not generate one receipt
+per month. Bulk entry produces an individual receipt for each member payment.
+Reuse existing receipt numbering, view/download and Welfare thank-you services.
+
+A month can be shown as having a recorded contribution when a valid payment
+explicitly covers it. This indicates coverage, not settlement of a fixed debt.
+Allow legitimate additional payments without confusing them with duplicate
+submissions. Never multiply a payment amount by the number of months covered.
+
+## 31.4 Welfare category and dedicated overview
+
+Welfare must be selectable in single entry, bulk entry and Excel contribution
+imports. Reuse the existing category; do not create duplicate Welfare categories.
+Provide a dedicated Welfare page backed by these same contribution records.
+
+Support viewing welfare participants from the church member database, month/year
+filters, recorded coverage, amounts received, payment history and receipt
+view/download actions. Distinguish money received during a date range from the
+months covered by those payments; never count one payment twice.
+Do not automatically label every church member a welfare participant or debtor;
+enrolment rules remain an open decision.
+
+## 31.5 Contribution category ordering and Other
+
+Show Other last in every contribution-category selector used for recording,
+including single and bulk entry. Preserve the intended order of other categories.
+Do not rename or recreate category records merely to change their display order.
+
+Selecting Other reveals a required plain-text field:
+"What is this contribution for?"
+Validate it on the server and in the form. Require the same description for Other
+rows in Excel imports. Save it with the contribution and show it in contribution
+details and the receipt. Do not automatically create a category from that text.
+Clear or ignore stale Other-only input when the category changes.
+
+## 31.6 Remaining decisions
+
+These choices are not yet stakeholder-approved:
+- Whether one batch may mix categories and payment dates.
+- Whether invalid rows block the whole batch or staff can explicitly submit valid rows.
+- Welfare enrolment rules: which members belong in the participant list.
+- Whether backdated coverage for previous months is allowed.
+- If monetary totals by coverage month are needed, how a payment is allocated
+  across its selected months. Do not assume an equal split; coverage tracking alone
+  does not require inventing a monetary allocation.
+
+Do not erase approved requirements because these choices remain open.
+Preserve existing member linking/merging approval rules and permissions.
+
+## 31.7 Completion and implementation sequence
+
+Recommended sequence: category ordering and Other validation; member Excel
+template/import; shared on-screen and Excel bulk contributions; welfare period
+selection/overview; receipt and SMS integration with end-to-end checks.
+
+Completion requires both entry methods, reviewed member creation/import, flexible
+welfare coverage without fixed dues, one receipt per payment, functional receipt
+view/download actions, accurate totals, authorization and duplicate-prevention tests.
+Verify desktop/mobile screens against TCI-HLC-design.md and use client-friendly
+wording rather than technical errors. These are approved requirements, not completed
+features. Keep the PRD updated in each implementation PR and distinguish approved,
+implemented and pending work. All development PRs target feature-branch.
