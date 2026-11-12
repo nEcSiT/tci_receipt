@@ -288,9 +288,19 @@
                 {% endif %}
               </td>
               <td style="text-align: right;">
-                <a href="{% url 'contributions:contribution_detail' c.id %}" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;">
-                  View
-                </a>
+                <div style="display: inline-flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                  <a href="{% url 'contributions:contribution_detail' c.id %}" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                    View
+                  </a>
+                  {% if c.receipt %}
+                    <a href="{% url 'receipts:receipt_detail' c.receipt.id %}" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                      View Receipt
+                    </a>
+                    <a href="{% url 'receipts:receipt_pdf' c.receipt.id %}?download=1" target="_blank" class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                      PDF
+                    </a>
+                  {% endif %}
+                </div>
               </td>
             </tr>
             {% empty %}

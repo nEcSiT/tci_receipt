@@ -212,6 +212,15 @@ class ReceiptDeliveryRecord(UUIDBaseModel):
         verbose_name_plural = "Receipt Delivery Records"
         ordering = ["-created_at"]
 
+    @property
+    def masked_recipient_phone(self) -> str:
+        if not self.recipient_phone:
+            return ""
+        s = self.recipient_phone.strip()
+        if len(s) > 7:
+            return f"{s[:4]}••••{s[-3:]}"
+        return "••••"
+
     def __str__(self):
         return f"{self.receipt.receipt_number} -> {self.recipient_phone} ({self.status})"
 

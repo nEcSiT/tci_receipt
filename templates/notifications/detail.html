@@ -232,11 +232,21 @@
             <dd style="font-size: 14px; margin: 4px 0 0 0;">
               {% if related_receipt %}
                 {% if can_view_receipt %}
-                  <a href="{% url 'receipts:receipt_detail' related_receipt.id %}" style="font-weight: 600; color: var(--navy-dark); text-decoration: underline;">
-                    {{ related_receipt.receipt_number }}
-                  </a>
-                  <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
-                    Generated {{ related_receipt.generated_at|date:"M d, Y" }}
+                  <div>
+                    <a href="{% url 'receipts:receipt_detail' related_receipt.id %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: underline;">
+                      {{ related_receipt.receipt_number }}
+                    </a>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                      Generated {{ related_receipt.generated_at|date:"M d, Y" }}
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                      <a href="{% url 'receipts:receipt_detail' related_receipt.id %}" class="btn btn-outline btn-sm">
+                        View Receipt
+                      </a>
+                      <a href="{% url 'receipts:receipt_pdf' related_receipt.id %}?download=1" class="btn btn-primary btn-sm">
+                        Download PDF
+                      </a>
+                    </div>
                   </div>
                 {% else %}
                   <span style="font-weight: 600; color: var(--text-primary);">

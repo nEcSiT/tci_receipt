@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Review Contributor {{ tc.phone_number }} — TCI Higher Life Center{% endblock %}
+{% block page_title %}Review Contributor{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<a href="{% url 'members:temporary_list' %}">Temporary Contributors</a> &rsaquo;
+<strong>{{ tc.phone_number }}</strong>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+      <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+        Contributor: <code>{{ tc.phone_number }}</code>
+      </h1>
+      {% if tc.status == 'UNVERIFIED' %}
+        <span class="badge badge-warning" style="font-size: 12px; padding: 4px 10px;">Unverified</span>
+      {% elif tc.status == 'UNDER_REVIEW' %}
+        <span class="badge" style="background: var(--color-blue); color: #fff; font-size: 12px; padding: 4px 10px;">Under Review</span>
+      {% elif tc.status == 'LINKED' %}
+        <span class="badge badge-success" style="font-size: 12px; padding: 4px 10px;">Linked</span>
+      {% elif tc.status == 'CONVERTED' %}
+        <span class="badge badge-success" style="font-size: 12px; padding: 4px 10px;">Converted to Member</span>
+      {% endif %}
+    </div>
+    <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+      Digital transaction contributor profile requiring authorized verification and member association.
+    </p>
+  </div>
+
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="{% url 'members:temporary_list' %}" class="btn btn-outline">
+      &larr; Back to List
+    </a>
+    {% if tc.status == 'UNVERIFIED' or tc.status == 'UNDER_REVIEW' %}
+      {% if can_create %}
+      <a href="{% url 'members:temporary_register' tc.id %}" class="btn btn-primary">
+        Register as a new member
+      </a>
+      {% endif %}
+      {% if can_edit %}
+      <a href="{% url 'members:temporary_link' tc.id %}" class="btn btn-outline">
+        Link to an existing member
+      </a>
+      {% endif %}
+    {% elif tc.converted_member %}
+      <a href="{% url 'members:member_detail' tc.converted_member.id %}" class="btn btn-primary">
+        View Member Profile &rsaquo;
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Business Rules Banner (PRD §§5.5-5.7) -->
+{% if tc.status == 'UNVERIFIED' or tc.status == 'UNDER_REVIEW' %}
+<div class="alert alert-warning" style="margin-bottom: 24px; padding: 14px 18px; border-left: 4px solid var(--color-yellow); background: rgba(254, 195, 19, 0.12); font-size: 14px; color: var(--navy-dark); font-weight: 500; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span><strong>Unmatched contributor:</strong> This contribution has not yet been matched to a church member.</span>
+  </div>
+  <div style="display: flex; gap: 8px;">
+    {% if can_create %}
+    <a href="{% url 'members:temporary_register' tc.id %}" class="btn btn-primary btn-sm">Register Member</a>
+    {% endif %}
+    {% if can_edit %}
+    <a href="{% url 'members:temporary_link' tc.id %}" class="btn btn-outline btn-sm">Link to Member</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Pending Linking Request Alert if any -->
+{% if pending_linking_request %}
+<div class="card" style="margin-bottom: 24px; padding: 20px; border-left: 4px solid var(--color-blue); background: rgba(43, 114, 186, 0.05);">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span class="badge" style="background: var(--color-blue); color: #fff;">Linking Request Pending</span>
+        <span style="font-size: 13px; color: var(--text-secondary);">Requested by <strong>{{ pending_linking_request.requested_by.get_full_name|default:pending_linking_request.requested_by.email }}</strong> on {{ pending_linking_request.created_at|date:"M d, Y H:i" }}</span>
+      </div>
+      <p style="font-size: 14px; color: var(--navy-dark); margin: 0 0 6px 0;">
+        Your request has been sent to the administrator for approval.
+      </p>
+      <div style="font-size: 13px; color: var(--text-secondary);">
+        Target Member: <strong>{{ pending_linking_request.target_member.full_name }}</strong> (<code>{{ pending_linking_request.target_member.member_number }}</code>)
+        &bull; Reason: <em>"{{ pending_linking_request.reason }}"</em>
+      </div>
+
+      {% if pending_linking_request.has_phone_conflict %}
+      <div class="alert alert-danger" style="margin-top: 12px; padding: 10px 14px; font-size: 13px;">
+        <strong>Phone conflict flagged:</strong> {{ pending_linking_request.phone_conflict_details|default:"This phone number is already registered to another member. Please review the existing member." }}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if is_system_administrator %}
+    <div style="background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); min-width: 280px;">
+      <div style="font-size: 13px; font-weight: 700; color: var(--navy-dark); margin-bottom: 10px;">
+        Administrator Decision
+      </div>
+      <form method="post" action="{% url 'members:linking_request_review' pending_linking_request.id %}">
+        {% csrf_token %}
+        <div style="margin-bottom: 10px;">
+          <input type="text" name="remarks" class="form-control" placeholder="Decision remarks (optional)" style="height: 36px; font-size: 13px;">
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="submit" name="action" value="approve" class="btn btn-primary btn-sm" style="flex: 1;">
+            Approve Link
+          </button>
+          <button type="submit" name="action" value="reject" class="btn btn-outline btn-sm" style="flex: 1; border-color: var(--color-red); color: var(--color-red);">
+            Reject
+          </button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Details & History Grid -->
+<div style="display: grid; grid-template-columns: 360px 1fr; gap: 24px; align-items: start;">
+  <!-- Left Column: Contributor Identity Card -->
+  <div>
+    <div class="card" style="padding: 24px; margin-bottom: 20px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        Contributor Identity
+      </h3>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; font-size: 14px;">
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Transaction Phone Number</div>
+          <div style="font-weight: 700; color: var(--navy-dark); margin-top: 2px; font-size: 17px;">
+            <code>{{ tc.phone_number }}</code>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Payer Name (Provider-Supplied)</div>
+          <div style="font-weight: 600; color: var(--navy-dark); margin-top: 2px;">
+            {% if tc.provider_name %}
+              {{ tc.provider_name }}
+              <span class="badge badge-warning" style="font-size: 10px; margin-left: 4px;">Unverified</span>
+            {% elif tc.name %}
+              {{ tc.name }}
+            {% else %}
+              <span style="color: var(--text-muted); font-style: italic;">Not provided by payment gateway</span>
+            {% endif %}
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            Staff note: Do not assume provider account name is a verified church identity.
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Network / Provider</div>
+          <div style="margin-top: 2px;">
+            {{ tc.provider|default:"Digital Payment Gateway" }}
+          </div>
+        </div>
+
+        {% if tc.provider_account_reference %}
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Account Reference</div>
+          <div style="margin-top: 2px; font-family: monospace;">{{ tc.provider_account_reference }}</div>
+        </div>
+        {% endif %}
+
+        <div>
+          <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">First Recorded At</div>
+          <div style="margin-top: 2px; color: var(--text-secondary);">
+            {{ tc.created_at|date:"M d, Y H:i" }} UTC
+          </div>
+        </div>
+
+        {% if tc.converted_member %}
+        <div style="background: rgba(78, 203, 77, 0.1); padding: 12px; border-radius: 6px; border: 1px solid rgba(78, 203, 77, 0.3);">
+          <div style="font-size: 12px; color: var(--color-green); font-weight: 700; text-transform: uppercase;">Associated Member</div>
+          <div style="font-weight: 700; color: var(--navy-dark); margin-top: 4px;">
+            <a href="{% url 'members:member_detail' tc.converted_member.id %}" style="color: var(--navy-dark); text-decoration: underline;">
+              {{ tc.converted_member.full_name }} ({{ tc.converted_member.member_number }})
+            </a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Financial Summary Card -->
+    <div class="card" style="padding: 24px; background: linear-gradient(135deg, rgba(1, 19, 69, 0.04) 0%, rgba(241, 104, 34, 0.04) 100%);">
+      <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
+        Total Contributed
+      </div>
+      <div style="font-size: 30px; font-weight: 700; color: var(--navy-dark); margin-top: 6px;">
+        GHS {{ total_amount|floatformat:2 }}
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+        {{ contributions_count }} recorded contribution{{ contributions_count|pluralize }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Contribution History & Actions -->
+  <div>
+    <!-- Contribution History Card -->
+    <div class="card" style="padding: 24px; margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+          Contribution & Receipt History
+        </h3>
+        <span style="font-size: 13px; color: var(--text-secondary);">{{ contributions_count }} transaction{{ contributions_count|pluralize }}</span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Contribution ID</th>
+              <th>Date</th>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th style="text-align: right;">Receipt Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in contributions %}
+            <tr>
+              <td>
+                <a href="{% url 'contributions:contribution_detail' c.id %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: none;">
+                  <code>{{ c.contribution_number }}</code>
+                </a>
+              </td>
+              <td>{{ c.contribution_date|date:"M d, Y" }}</td>
+              <td>{{ c.contribution_type.name }}</td>
+              <td style="font-weight: 700; color: var(--navy-dark);">
+                {{ c.currency }} {{ c.amount|floatformat:2 }}
+              </td>
+              <td>
+                {% if c.status == 'CONFIRMED' %}
+                  <span class="badge badge-success">Confirmed</span>
+                {% elif c.status == 'PENDING' %}
+                  <span class="badge badge-warning">Pending</span>
+                {% else %}
+                  <span class="badge badge-danger">{{ c.status }}</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                {% if c.receipt %}
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                  <code style="font-size: 11px; color: var(--navy-dark); font-weight: 600;">{{ c.receipt.receipt_number }}</code>
+                  <div style="display: inline-flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                    <a href="{% url 'receipts:receipt_detail' c.receipt.id %}" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                      View Receipt
+                    </a>
+                    <a href="{% url 'receipts:receipt_pdf' c.receipt.id %}?download=1" target="_blank" class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 11px;">
+                      Download PDF
+                    </a>
+                  </div>
+                </div>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 12px;">No receipt</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                No contributions found for this contributor record.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Linking Requests History Card -->
+    {% if linking_requests %}
+    <div class="card" style="padding: 24px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+        Member Linking Requests
+      </h3>
+
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Target Member</th>
+              <th>Requested By</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Review Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for req in linking_requests %}
+            <tr>
+              <td style="font-size: 13px;">{{ req.created_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <a href="{% url 'members:member_detail' req.target_member.id %}" style="font-weight: 600; color: var(--navy-dark);">
+                  {{ req.target_member.full_name }}
+                </a>
+              </td>
+              <td style="font-size: 13px;">{{ req.requested_by.get_full_name|default:req.requested_by.email }}</td>
+              <td style="font-size: 13px; max-width: 220px;">{{ req.reason }}</td>
+              <td>
+                {% if req.status == 'PENDING' %}
+                  <span class="badge badge-warning">Pending Approval</span>
+                {% elif req.status == 'APPROVED' %}
+                  <span class="badge badge-success">Approved</span>
+                {% elif req.status == 'REJECTED' %}
+                  <span class="badge badge-danger">Rejected</span>
+                {% endif %}
+              </td>
+              <td style="font-size: 12px; color: var(--text-secondary);">
+                {% if req.reviewed_by %}
+                  By {{ req.reviewed_by.get_full_name|default:req.reviewed_by.email }} on {{ req.reviewed_at|date:"M d, Y" }}
+                  {% if req.review_remarks %}<br><em>"{{ req.review_remarks }}"</em>{% endif %}
+                {% else %}
+                  Awaiting review
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

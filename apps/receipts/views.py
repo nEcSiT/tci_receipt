@@ -284,10 +284,13 @@ class ReceiptPdfView(View):
                     pdf_bytes = None
 
         if not pdf_bytes:
-            return HttpResponse("Error compiling receipt PDF.", status=500)
+            return HttpResponse("We couldn’t prepare your PDF. Please try again or contact the church office.", status=503)
 
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
-        response["Content-Disposition"] = f'inline; filename="{receipt.receipt_number}.pdf"'
+        if request.GET.get("download") == "1":
+            response["Content-Disposition"] = f'attachment; filename="{receipt.receipt_number}.pdf"'
+        else:
+            response["Content-Disposition"] = f'inline; filename="{receipt.receipt_number}.pdf"'
         return response
 
 
@@ -491,14 +494,18 @@ class ReceiptAccessView(View):
             return HttpResponse("Too many receipt access attempts. Please try again later.", status=429)
         cache.set(rate_key, attempts + 1, 300)
 
-        receipt = ReceiptService.get_receipt_by_access_token(token)
+        receipt, error_code = ReceiptService.resolve_access_token(token)
         if not receipt:
+            if error_code == "EXPIRED":
+                error_msg = "This receipt link has expired. Please contact the church office for assistance."
+            else:
+                error_msg = "This receipt access link is invalid, expired, or has been revoked."
             return render(
                 request,
                 "receipts/receipt_access.html",
                 {
                     "is_valid": False,
-                    "error_message": "This receipt access link is invalid, expired, or has been revoked.",
+                    "error_message": error_msg,
                 },
                 status=404,
             )
@@ -517,6 +524,7 @@ class ReceiptAccessView(View):
         # If download query param requested, stream the PDF
         if request.GET.get("download") == "1":
             storage = get_storage_service()
+            pdf_bytes = None
             try:
                 pdf_bytes = ReceiptPdfService.render_pdf(receipt)
                 if receipt.pdf_storage_key:
@@ -525,10 +533,23 @@ class ReceiptAccessView(View):
                     except Exception:
                         pass
             except Exception:
-                try:
-                    pdf_bytes = storage.get(receipt.pdf_storage_key)
-                except Exception:
-                    pdf_bytes = ReceiptPdfService.render_pdf(receipt)
+                if receipt.pdf_storage_key and storage.exists(receipt.pdf_storage_key):
+                    try:
+                        pdf_bytes = storage.get(receipt.pdf_storage_key)
+                    except Exception:
+                        pdf_bytes = None
+
+            if not pdf_bytes:
+                return render(
+                    request,
+                    "receipts/receipt_access.html",
+                    {
+                        "is_valid": False,
+                        "error_message": "We couldn’t prepare your PDF. Please try again or contact the church office.",
+                    },
+                    status=500,
+                )
+
             response = HttpResponse(pdf_bytes, content_type="application/pdf")
             response["Content-Disposition"] = f'attachment; filename="{receipt.receipt_number}.pdf"'
             return response

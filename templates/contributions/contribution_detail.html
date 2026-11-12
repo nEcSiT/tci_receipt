@@ -126,10 +126,10 @@
       {% elif contribution.temporary_contributor %}
       <div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-          <span class="badge badge-warning" style="font-size: 11px; padding: 4px 8px;">Unlinked Temporary Contributor</span>
+          <span class="badge badge-warning" style="font-size: 11px; padding: 4px 8px;">Unverified Contributor</span>
         </div>
         <div class="alert alert-warning" style="padding: 10px 14px; font-size: 13px; margin-bottom: 4px;">
-          This contribution originated from an unlinked temporary contributor. Retained until authorized member linking occurs.
+          Not yet linked to a church member.
         </div>
 
         <div>
@@ -165,6 +165,12 @@
           <div style="margin-top: 2px;">{{ contribution.temporary_contributor.first_name }} {{ contribution.temporary_contributor.last_name }}</div>
         </div>
         {% endif %}
+
+        <div style="margin-top: 8px;">
+          <a href="{% url 'members:temporary_review' contribution.temporary_contributor.id %}" class="btn btn-primary btn-sm" style="width: 100%; text-align: center; justify-content: center;">
+            Review Contributor &rsaquo;
+          </a>
+        </div>
       </div>
       {% endif %}
     </div>
@@ -296,7 +302,7 @@
               </div>
               <div style="display: flex; gap: 8px;">
                 <a href="{% url 'receipts:receipt_detail' receipt.id %}" class="btn btn-outline btn-sm">View Receipt</a>
-                <a href="{% url 'receipts:receipt_pdf' receipt.id %}" target="_blank" class="btn btn-primary btn-sm">Download PDF</a>
+                <a href="{% url 'receipts:receipt_pdf' receipt.id %}?download=1" target="_blank" class="btn btn-primary btn-sm">Download PDF</a>
               </div>
             </div>
           {% else %}

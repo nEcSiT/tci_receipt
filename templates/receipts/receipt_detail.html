@@ -65,7 +65,7 @@
 
 {% if receipt.status == 'DELETED' %}
 <div class="alert alert-danger" style="margin-bottom: 24px;">
-  <strong>Notice:</strong> This receipt was soft-deleted on {{ receipt.deleted_at|date:"M d, Y H:i" }} by {{ receipt.deleted_by.full_name|default:receipt.deleted_by.email }}.
+  <strong>Notice:</strong> This receipt was soft-deleted on {{ receipt.deleted_at|date:"M d, Y H:i" }} by {% if receipt.deleted_by %}{{ receipt.deleted_by.full_name|default:receipt.deleted_by.email }}{% else %}System{% endif %}.
   It is revoked and excluded from normal operational registries, but retained in compliance with non-negotiable financial audit trail invariants.
 </div>
 {% endif %}
@@ -214,7 +214,7 @@
         <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
           <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
             <strong>Field: <code>{{ e.field_name }}</code></strong>
-            <span style="color: var(--text-muted);">{{ e.created_at|date:"M d, Y H:i" }} by {{ e.user.full_name|default:e.user.email }}</span>
+            <span style="color: var(--text-muted);">{{ e.created_at|date:"M d, Y H:i" }} by {% if e.user %}{{ e.user.full_name|default:e.user.email }}{% else %}System{% endif %}</span>
           </div>
           <div style="font-size: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px;">
             <div><span style="color: var(--text-muted); font-size: 11px;">OLD:</span> <del>{{ e.old_value|default:"(empty)" }}</del></div>
@@ -244,7 +244,7 @@
         {% for d in deliveries %}
         <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 10px 14px; border-radius: 6px; font-size: 13px;">
           <div>
-            <strong>{{ d.channel }}</strong> &bull; Recipient: <code>{{ d.recipient_phone }}</code>
+            <strong>{{ d.channel }}</strong> &bull; Recipient: <code>{{ d.masked_recipient_phone }}</code>
             {% if d.failure_reason %}
               <div style="font-size: 11px; color: #dc3545; margin-top: 2px;">{{ d.failure_reason }}</div>
             {% endif %}
@@ -278,7 +278,7 @@
             <span style="font-size: 11px; color: var(--text-muted);">{{ log.created_at|date:"M d, Y H:i:s" }}</span>
           </div>
           <div style="font-size: 12px; color: var(--text-secondary);">
-            Actor: {{ log.user.full_name|default:log.user.email|default:"System" }}
+            Actor: {% if log.user %}{{ log.user.full_name|default:log.user.email }}{% else %}System{% endif %}
           </div>
         </div>
         {% endfor %}

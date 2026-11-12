@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load account_tags %}
+
+{% block title %}Contributor Linking Requests — TCI Higher Life Center{% endblock %}
+{% block page_title %}Contributor Linking Requests{% endblock %}
+
+{% block breadcrumbs %}
+<span>TCI Higher Life Center</span> &rsaquo;
+<a href="{% url 'members:member_list' %}">Members</a> &rsaquo;
+<a href="{% url 'members:temporary_list' %}">Temporary Contributors</a> &rsaquo;
+<strong>Linking Requests</strong>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+  <div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin-bottom: 4px;">Contributor Linking Requests</h1>
+    <p style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+      Formal request and approval workflow for linking unverified temporary contributors to church members.
+      Requires System Administrator approval to ensure financial audit integrity.
+    </p>
+  </div>
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="{% url 'members:temporary_list' %}" class="btn btn-outline">
+      &larr; Temporary Contributors
+    </a>
+    <a href="{% url 'members:member_list' %}" class="btn btn-outline">
+      Member Directory
+    </a>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start;">
+  <!-- Left Column: Requests Table -->
+  <div>
+    <!-- Filter Bar -->
+    <div class="card" style="padding: 14px 20px; margin-bottom: 20px;">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Status:</span>
+        <a href="?status=PENDING" class="btn btn-sm {% if status_filter == 'PENDING' %}btn-primary{% else %}btn-outline{% endif %}">
+          Pending {% if pending_count > 0 %}({{ pending_count }}){% endif %}
+        </a>
+        <a href="?status=APPROVED" class="btn btn-sm {% if status_filter == 'APPROVED' %}btn-primary{% else %}btn-outline{% endif %}">Approved</a>
+        <a href="?status=REJECTED" class="btn btn-sm {% if status_filter == 'REJECTED' %}btn-primary{% else %}btn-outline{% endif %}">Rejected</a>
+        <a href="?status=all" class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline{% endif %}">All</a>
+      </div>
+    </div>
+
+    <!-- Requests Table -->
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Temporary Contributor</th>
+            <th>Target Member</th>
+            <th>Reason</th>
+            <th>Requested By</th>
+            <th>Status</th>
+            {% if is_system_administrator %}
+            <th style="text-align: right;">Admin Action</th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for req in page_obj %}
+          <tr>
+            <td>
+              <div style="font-weight: 700; color: var(--navy-dark); font-family: monospace;">
+                <a href="{% url 'members:temporary_review' req.temporary_contributor.id %}" style="color: var(--navy-dark); text-decoration: underline;">
+                  {{ req.temporary_contributor.phone_number }}
+                </a>
+              </div>
+              {% if req.temporary_contributor.provider_name %}
+              <div style="font-size: 12px; color: var(--text-secondary);">
+                {{ req.temporary_contributor.provider_name }}
+              </div>
+              {% endif %}
+              {% if req.has_phone_conflict %}
+              <div style="font-size: 11px; color: var(--color-red); font-weight: 600; margin-top: 2px;">
+                ⚠️ Phone Conflict
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              <div style="font-weight: 600; color: var(--navy-dark);">
+                <a href="{% url 'members:member_detail' req.target_member.id %}" style="color: var(--navy-dark);">
+                  {{ req.target_member.full_name }}
+                </a>
+              </div>
+              <div style="font-size: 12px; color: var(--text-secondary);">
+                <code>{{ req.target_member.member_number }}</code>
+              </div>
+            </td>
+            <td style="font-size: 13px; max-width: 220px;">
+              {{ req.reason }}
+              {% if req.review_remarks %}
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                Remarks: <em>{{ req.review_remarks }}</em>
+              </div>
+              {% endif %}
+            </td>
+            <td style="font-size: 13px;">
+              <div>{{ req.requested_by.get_full_name|default:req.requested_by.email }}</div>
+              <div style="font-size: 11px; color: var(--text-secondary);">{{ req.created_at|date:"M d, Y H:i" }}</div>
+            </td>
+            <td>
+              {% if req.status == 'PENDING' %}
+                <span class="badge badge-warning">Pending Review</span>
+              {% elif req.status == 'APPROVED' %}
+                <span class="badge badge-success">Approved</span>
+              {% else %}
+                <span class="badge badge-danger">Rejected</span>
+              {% endif %}
+            </td>
+            {% if is_system_administrator %}
+            <td style="text-align: right;">
+              {% if req.status == 'PENDING' %}
+              <div style="display: inline-flex; gap: 6px;">
+                <form method="post" action="{% url 'members:linking_request_review' req.id %}" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="approve">
+                  <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Approve linking? All contributions from {{ req.temporary_contributor.phone_number }} will be transferred to {{ req.target_member.full_name }}.')">
+                    Approve
+                  </button>
+                </form>
+                <form method="post" action="{% url 'members:linking_request_review' req.id %}" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="reject">
+                  <button type="submit" class="btn btn-outline btn-sm" style="color: var(--color-orange);">
+                    Reject
+                  </button>
+                </form>
+              </div>
+              {% else %}
+              <span style="font-size: 12px; color: var(--text-secondary);">
+                Reviewed by {{ req.reviewed_by.get_full_name|default:req.reviewed_by.email }}
+              </span>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 32px 16px; color: var(--text-muted);">
+              No contributor linking requests found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right Column: Governance Rules Card -->
+  <div>
+    <div class="card" style="padding: 24px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 14px;">
+        Linking Governance (PRD §5.6)
+      </h3>
+      <ul style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; padding-left: 18px; margin: 0 0 16px 0;">
+        <li>Member linking transfers all historical contributions to the target member profile.</li>
+        <li>Approval is strictly reserved for the <strong>System Administrator</strong>.</li>
+        <li>Financial audit trail, receipt numbers, and contribution records are preserved immutably.</li>
+        <li>Phone conflicts are flagged explicitly to prevent accidental identity collision.</li>
+        <li>Original temporary contributor records remain stored for provenance.</li>
+      </ul>
+
+      <div style="background: rgba(1, 19, 69, 0.04); padding: 14px; border-radius: 6px; font-size: 12px; color: var(--navy-dark);">
+        <strong>Audit Trail:</strong> Every request, approval, and rejection is recorded in the immutable audit log with user and timestamp metadata.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

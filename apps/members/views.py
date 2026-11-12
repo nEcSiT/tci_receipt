@@ -13,9 +13,11 @@ from apps.members.models import (
     MemberPhoneNumber,
     TemporaryContributor,
     MemberMergeRequest,
+    ContributorLinkingRequest,
     MemberStatus,
     TemporaryContributorStatus,
     MemberMergeStatus,
+    ContributorLinkingStatus,
 )
 from apps.members.services import (
     MemberService,
@@ -66,6 +68,9 @@ class MemberListView(View):
         pending_merges_count = MemberMergeRequest.objects.filter(
             status=MemberMergeStatus.PENDING
         ).count()
+        pending_linking_count = ContributorLinkingRequest.objects.filter(
+            status=ContributorLinkingStatus.PENDING
+        ).count()
 
         ministries = (
             Member.objects.exclude(ministry__isnull=True)
@@ -84,6 +89,7 @@ class MemberListView(View):
             "active_count": active_count,
             "unverified_tc_count": unverified_tc_count,
             "pending_merges_count": pending_merges_count,
+            "pending_linking_count": pending_linking_count,
             "ministries": ministries,
         })
 
@@ -155,7 +161,7 @@ class MemberDetailView(View):
         )
 
         phones = member.phone_numbers.all().order_by("-is_primary", "-is_active", "created_at")
-        contributions = Contribution.objects.filter(member=member).select_related("contribution_type").order_by("-created_at")[:10]
+        contributions = Contribution.objects.filter(member=member).select_related("contribution_type", "receipt").order_by("-created_at")[:10]
         merge_requests = MemberMergeRequest.objects.filter(
             Q(source_member=member) | Q(target_member=member)
         ).select_related("source_member", "target_member", "requested_by").order_by("-created_at")
@@ -397,6 +403,359 @@ class TemporaryContributorActionView(View):
             messages.error(request, "; ".join(e.messages) if hasattr(e, "messages") else str(e))
 
         return redirect("members:temporary_list")
+
+
+class TemporaryContributorReviewView(View):
+    """
+    Dedicated Review contributor screen (PRD §§5.5–5.7).
+    Accessible from temporary contributors list and relevant contribution.
+    Displays:
+    - Supplied name, transaction phone, network provider
+    - Contribution history with view receipt / download PDF actions
+    - Current Unverified status with explicit explanation:
+      “This contribution has not yet been matched to a church member.”
+    - Two distinct primary actions:
+      * Register as a new member
+      * Link to an existing member
+    - Displays linking requests history and allows System Administrator to approve/reject.
+    """
+
+    def get(self, request, tc_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.view") or request.user.has_permission("member.edit")):
+            raise PermissionDenied("You do not have permission to view temporary contributors.")
+
+        tc = get_object_or_404(TemporaryContributor, id=tc_id)
+        contributions = (
+            Contribution.objects.filter(temporary_contributor=tc)
+            .select_related("contribution_type", "receipt")
+            .order_by("-contribution_date", "-created_at")
+        )
+        total_amount = sum((c.amount for c in contributions), 0)
+        linking_requests = (
+            ContributorLinkingRequest.objects.filter(temporary_contributor=tc)
+            .select_related("target_member", "requested_by", "reviewed_by")
+            .order_by("-created_at")
+        )
+        pending_linking_request = linking_requests.filter(status=ContributorLinkingStatus.PENDING).first()
+
+        return render(
+            request,
+            "members/temporary_review.html",
+            {
+                "tc": tc,
+                "contributions": contributions,
+                "contributions_count": contributions.count(),
+                "total_amount": total_amount,
+                "linking_requests": linking_requests,
+                "pending_linking_request": pending_linking_request,
+                "is_system_administrator": request.user.is_system_administrator,
+                "can_edit": request.user.is_system_administrator or request.user.has_permission("member.edit"),
+                "can_create": request.user.is_system_administrator or request.user.has_permission("member.create"),
+            },
+        )
+
+
+class TemporaryContributorRegisterView(View):
+    """
+    Registers an unverified temporary contributor as a new permanent church member.
+    Opens a proper member form using existing member fields and validation.
+    Prefills available information; does not assume provider name is verified identity.
+    Checks normalized phone numbers for existing membership before creating another member.
+    Shows confirmation explaining that previous contributions will appear under the new member.
+    Creates member and reassigns contributor's history in one atomic transaction.
+    Prevents duplicate registration from repeated clicks or concurrent requests.
+    Finishes with 'Member registered successfully' and View member action.
+    """
+
+    def get(self, request, tc_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to register new church members.")
+
+        tc = get_object_or_404(TemporaryContributor, id=tc_id)
+        if tc.status in [TemporaryContributorStatus.CONVERTED, TemporaryContributorStatus.LINKED]:
+            messages.info(request, "This contributor has already been registered or linked.")
+            if tc.converted_member:
+                return redirect("members:member_detail", member_id=tc.converted_member.id)
+            return redirect("members:temporary_review", tc_id=tc.id)
+
+        contributions = Contribution.objects.filter(temporary_contributor=tc)
+        total_amount = sum((c.amount for c in contributions), 0)
+
+        # Prefill names if staff had entered them; if only provider name exists, present it as hint
+        prefill_first = tc.first_name or ""
+        prefill_last = tc.last_name or ""
+
+        return render(
+            request,
+            "members/temporary_register.html",
+            {
+                "tc": tc,
+                "contributions_count": contributions.count(),
+                "total_amount": total_amount,
+                "prefill_first": prefill_first,
+                "prefill_last": prefill_last,
+            },
+        )
+
+    def post(self, request, tc_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to register new church members.")
+
+        tc = get_object_or_404(TemporaryContributor, id=tc_id)
+        first_name = request.POST.get("first_name", "").strip()
+        middle_name = request.POST.get("middle_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        email = request.POST.get("email", "").strip()
+        ministry = request.POST.get("ministry", "").strip()
+        team = request.POST.get("team", "").strip()
+        department = request.POST.get("department", "").strip()
+
+        if not first_name or not last_name:
+            messages.error(request, "First name and last name are required.")
+            contributions = Contribution.objects.filter(temporary_contributor=tc)
+            total_amount = sum((c.amount for c in contributions), 0)
+            return render(
+                request,
+                "members/temporary_register.html",
+                {
+                    "tc": tc,
+                    "contributions_count": contributions.count(),
+                    "total_amount": total_amount,
+                    "form_data": request.POST,
+                    "prefill_first": tc.first_name or "",
+                    "prefill_last": tc.last_name or "",
+                },
+                status=400,
+            )
+
+        try:
+            new_member = TemporaryContributorService.convert_to_member(
+                actor=request.user,
+                temporary_contributor=tc,
+                first_name=first_name,
+                last_name=last_name,
+                middle_name=middle_name,
+                email=email,
+                ministry=ministry,
+                team=team,
+                department=department,
+            )
+            messages.success(request, "Member registered successfully")
+            return redirect("members:member_detail", member_id=new_member.id)
+        except ValidationError as e:
+            error_msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            messages.error(request, error_msg)
+            contributions = Contribution.objects.filter(temporary_contributor=tc)
+            total_amount = sum((c.amount for c in contributions), 0)
+            return render(
+                request,
+                "members/temporary_register.html",
+                {
+                    "tc": tc,
+                    "contributions_count": contributions.count(),
+                    "total_amount": total_amount,
+                    "form_data": request.POST,
+                    "prefill_first": tc.first_name or "",
+                    "prefill_last": tc.last_name or "",
+                    "error": error_msg,
+                },
+                status=400,
+            )
+
+
+class TemporaryContributorLinkView(View):
+    """
+    Links a temporary contributor to an existing church member.
+    Provides searchable member selection and clear comparison of the two records.
+    Requires a reason.
+    Ordinary authorized users submit a request for administrator approval.
+    System Administrator can approve immediately or submit requests.
+    Flags phone conflicts for authorized resolution.
+    Does not transfer contributions before approval.
+    """
+
+    def get(self, request, tc_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.edit")):
+            raise PermissionDenied("You do not have permission to link temporary contributors.")
+
+        tc = get_object_or_404(TemporaryContributor, id=tc_id)
+        if tc.status in [TemporaryContributorStatus.CONVERTED, TemporaryContributorStatus.LINKED]:
+            messages.info(request, "This contributor has already been linked or converted.")
+            if tc.converted_member:
+                return redirect("members:member_detail", member_id=tc.converted_member.id)
+            return redirect("members:temporary_review", tc_id=tc.id)
+
+        query = request.GET.get("q", "").strip()
+        members_qs = Member.objects.filter(status=MemberStatus.ACTIVE).prefetch_related("phone_numbers")
+        if query:
+            members_qs = members_qs.filter(
+                Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(member_number__icontains=query)
+                | Q(phone_numbers__phone_number__icontains=query)
+            ).distinct()
+
+        members = members_qs.order_by("first_name", "last_name")[:50]
+        contributions = Contribution.objects.filter(temporary_contributor=tc)
+        total_amount = sum((c.amount for c in contributions), 0)
+
+        # Pre-check if contributor phone conflicts with any active member
+        from apps.core.utils.phone import get_phone_lookup_variants
+        variants = get_phone_lookup_variants(tc.phone_number)
+        phone_conflict_member = (
+            MemberPhoneNumber.objects.filter(phone_number__in=variants, is_active=True)
+            .select_related("member")
+            .first()
+        )
+
+        return render(
+            request,
+            "members/temporary_link.html",
+            {
+                "tc": tc,
+                "members": members,
+                "query": query,
+                "contributions_count": contributions.count(),
+                "total_amount": total_amount,
+                "phone_conflict_member": phone_conflict_member.member if phone_conflict_member else None,
+                "is_system_administrator": request.user.is_system_administrator,
+            },
+        )
+
+    def post(self, request, tc_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.edit")):
+            raise PermissionDenied("You do not have permission to link temporary contributors.")
+
+        tc = get_object_or_404(TemporaryContributor, id=tc_id)
+        target_member_id = request.POST.get("target_member_id")
+        reason = request.POST.get("reason", "").strip()
+        add_phone = request.POST.get("add_phone") == "on"
+        immediate_approve = request.POST.get("immediate_approve") == "1" and request.user.is_system_administrator
+
+        if not target_member_id:
+            messages.error(request, "Please select an existing church member to link.")
+            return redirect("members:temporary_link", tc_id=tc.id)
+
+        if not reason:
+            messages.error(request, "A reason for linking is required.")
+            return redirect("members:temporary_link", tc_id=tc.id)
+
+        target_member = get_object_or_404(Member, id=target_member_id)
+
+        try:
+            linking_req = TemporaryContributorService.request_linking(
+                actor=request.user,
+                temporary_contributor=tc,
+                target_member=target_member,
+                reason=reason,
+                add_phone=add_phone,
+            )
+
+            if immediate_approve:
+                TemporaryContributorService.approve_linking(
+                    actor=request.user,
+                    linking_request=linking_req,
+                    review_remarks="Approved upon submission by System Administrator.",
+                )
+                messages.success(request, f"Contributor {tc.phone_number} successfully linked to {target_member.full_name}.")
+                return redirect("members:member_detail", member_id=target_member.id)
+
+            messages.success(request, "Your request has been sent to the administrator for approval.")
+            if linking_req.has_phone_conflict:
+                messages.warning(
+                    request,
+                    "This phone number is already registered to another member. Please review the existing member.",
+                )
+            return redirect("members:temporary_review", tc_id=tc.id)
+
+        except ValidationError as e:
+            messages.error(request, "; ".join(e.messages) if hasattr(e, "messages") else str(e))
+            return redirect("members:temporary_link", tc_id=tc.id)
+
+
+class ContributorLinkingRequestListView(View):
+    """Lists pending and historical contributor linking requests."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.view") or request.user.has_permission("member.edit")):
+            raise PermissionDenied("You do not have permission to view contributor linking requests.")
+
+        status_filter = request.GET.get("status", "all")
+        requests_qs = ContributorLinkingRequest.objects.select_related(
+            "temporary_contributor", "target_member", "requested_by", "reviewed_by"
+        ).all()
+
+        if status_filter != "all":
+            requests_qs = requests_qs.filter(status=status_filter.upper())
+
+        paginator = Paginator(requests_qs, 20)
+        page_obj = paginator.get_page(request.GET.get("page", 1))
+
+        pending_count = ContributorLinkingRequest.objects.filter(status=ContributorLinkingStatus.PENDING).count()
+
+        return render(
+            request,
+            "members/linking_request_list.html",
+            {
+                "page_obj": page_obj,
+                "status_filter": status_filter,
+                "pending_count": pending_count,
+                "is_system_administrator": request.user.is_system_administrator,
+            },
+        )
+
+
+class ContributorLinkingRequestReviewView(View):
+    """
+    System Administrator approval or rejection of a contributor linking request.
+    Restricted strictly to the System Administrator.
+    """
+
+    def post(self, request, request_id):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not request.user.is_system_administrator:
+            raise PermissionDenied("Only the System Administrator can approve or reject contributor linking requests.")
+
+        linking_req = get_object_or_404(ContributorLinkingRequest, id=request_id)
+        action = request.POST.get("action")
+        remarks = request.POST.get("remarks", "").strip()
+
+        try:
+            if action == "approve":
+                TemporaryContributorService.approve_linking(
+                    actor=request.user,
+                    linking_request=linking_req,
+                    review_remarks=remarks,
+                )
+                messages.success(request, "Contributor linking request approved successfully.")
+                return redirect("members:member_detail", member_id=linking_req.target_member.id)
+            elif action == "reject":
+                TemporaryContributorService.reject_linking(
+                    actor=request.user,
+                    linking_request=linking_req,
+                    review_remarks=remarks,
+                )
+                messages.success(request, "Contributor linking request has been rejected.")
+                return redirect("members:temporary_review", tc_id=linking_req.temporary_contributor.id)
+            else:
+                messages.error(request, f"Unknown action: {action}")
+        except ValidationError as e:
+            messages.error(request, "; ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+        return redirect("members:temporary_review", tc_id=linking_req.temporary_contributor.id)
 
 
 class MemberMergeListView(View):
