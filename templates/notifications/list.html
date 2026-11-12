@@ -97,6 +97,7 @@
           <th>Status</th>
           <th>Attempts</th>
           <th>Reference / Note</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -115,15 +116,17 @@
             <span class="badge badge-neutral" style="font-size: 11px;">{{ item.channel }}</span>
           </td>
           <td>
-            {% if item.status == 'SENT' or item.status == 'DELIVERED' %}
-            <span class="badge badge-success">{{ item.get_status_display }}</span>
-            {% elif item.status == 'PENDING' or item.status == 'SENDING' or item.status == 'RETRYING' %}
-            <span class="badge badge-warning">{{ item.get_status_display }}</span>
-            {% elif item.status == 'FAILED' or item.status == 'MANUAL_ACTION_REQUIRED' %}
-            <span class="badge badge-error">{{ item.get_status_display }}</span>
-            {% else %}
-            <span class="badge badge-neutral">{{ item.get_status_display }}</span>
-            {% endif %}
+            <a href="{% url 'notifications:notification_detail' item.id %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" style="text-decoration: none;" title="View notification details">
+              {% if item.status == 'SENT' or item.status == 'DELIVERED' %}
+              <span class="badge badge-success">{{ item.get_status_display }}</span>
+              {% elif item.status == 'PENDING' or item.status == 'SENDING' or item.status == 'RETRYING' %}
+              <span class="badge badge-warning">{{ item.get_status_display }}</span>
+              {% elif item.status == 'FAILED' or item.status == 'MANUAL_ACTION_REQUIRED' %}
+              <span class="badge badge-error">{{ item.get_status_display }}</span>
+              {% else %}
+              <span class="badge badge-neutral">{{ item.get_status_display }}</span>
+              {% endif %}
+            </a>
           </td>
           <td>{{ item.attempt_count }}</td>
           <td style="font-size: 12px; max-width: 250px; word-break: break-word;">
@@ -135,10 +138,15 @@
             —
             {% endif %}
           </td>
+          <td style="white-space: nowrap;">
+            <a href="{% url 'notifications:notification_detail' item.id %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline btn-sm" style="padding: 4px 10px; font-size: 12px;">
+              View message
+            </a>
+          </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="7" style="text-align: center; padding: 36px; color: var(--text-muted);">
+          <td colspan="8" style="text-align: center; padding: 36px; color: var(--text-muted);">
             No notification records recorded.
           </td>
         </tr>

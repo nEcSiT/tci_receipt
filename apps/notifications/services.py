@@ -34,6 +34,7 @@ ALLOWED_PLACEHOLDERS: Set[str] = {
     "amount",
     "currency",
     "contribution_type",
+    "category",
     "receipt_number",
     "date",
     "secure_link",
@@ -202,6 +203,7 @@ class NotificationTemplateService:
             "amount": f"{amount:.2f}",
             "currency": currency,
             "contribution_type": contribution_type_name,
+            "category": contribution_type_name,
             "receipt_number": receipt_number,
             "date": date_str,
             "secure_link": secure_link,
@@ -239,6 +241,7 @@ class NotificationTemplateService:
             "amount": f"{amount:.2f}",
             "currency": currency,
             "contribution_type": contribution_type_name,
+            "category": contribution_type_name,
             "receipt_number": receipt_number,
             "date": date_str,
             "secure_link": secure_link,
@@ -501,6 +504,115 @@ class NotificationService:
                 recipient_phone,
                 sms_result.failure_reason,
             )
+
+        return notification
+
+    @classmethod
+    def dispatch_notification(
+        cls,
+        notification: Notification | uuid.UUID | str,
+        actor: Optional[User] = None,
+    ) -> Optional[Notification]:
+        """
+        Dispatches an existing PENDING notification to the configured SMS provider.
+        Records attempts and transitions states. Reuses saved wording.
+        Automatically retries on initial failure up to MAX_ATTEMPTS.
+        """
+        if isinstance(notification, (uuid.UUID, str)):
+            notification = Notification.objects.filter(id=notification).first()
+            if not notification:
+                logger.error("Notification not found for dispatch: %s", notification)
+                return None
+
+        # Idempotency: only dispatch if pending
+        if notification.status != NotificationStatus.PENDING:
+            return notification
+
+        notification.status = NotificationStatus.SENDING
+        notification.save(update_fields=["status", "updated_at"])
+
+        provider = get_sms_provider()
+        attempt_number = notification.attempt_count + 1
+        try:
+            sms_result = provider.send_sms(
+                recipient_phone=notification.recipient_phone,
+                message=notification.message,
+            )
+        except Exception as exc:
+            sms_result = SmsResult(success=False, status="FAILED", failure_reason=str(exc))
+
+        NotificationAttempt.objects.create(
+            notification=notification,
+            attempt_number=attempt_number,
+            provider_reference=sms_result.provider_reference,
+            provider_response=sms_result.provider_response,
+            status=sms_result.status,
+            failure_code=sms_result.failure_code,
+            failure_reason=sms_result.failure_reason,
+        )
+
+        now = timezone.now()
+        if sms_result.success:
+            notification.status = (
+                NotificationStatus.DELIVERED
+                if sms_result.status == "DELIVERED"
+                else NotificationStatus.SENT
+            )
+            notification.sent_at = now
+            notification.delivered_at = now if notification.status == NotificationStatus.DELIVERED else None
+            notification.attempt_count = attempt_number
+            notification.provider_reference = sms_result.provider_reference
+            notification.failure_reason = None
+            notification.save(update_fields=[
+                "status", "sent_at", "delivered_at", "attempt_count",
+                "provider_reference", "failure_reason", "updated_at"
+            ])
+
+            AuditService.log(
+                action="NOTIFICATION_SENT",
+                entity_type="Notification",
+                entity_id=notification.id,
+                user=actor,
+                new_values={
+                    "notification_type": notification.notification_type,
+                    "recipient_phone": notification.recipient_phone,
+                    "channel": notification.channel,
+                    "status": notification.status,
+                    "provider_reference": sms_result.provider_reference,
+                },
+                result=AuditResult.SUCCESS,
+            )
+            logger.info("Notification %s sent to %s via %s", notification.id, notification.recipient_phone, provider.provider_code)
+        else:
+            notification.status = NotificationStatus.FAILED
+            notification.attempt_count = attempt_number
+            notification.failure_reason = sms_result.failure_reason
+            notification.save(update_fields=[
+                "status", "attempt_count", "failure_reason", "updated_at"
+            ])
+
+            AuditService.log(
+                action="NOTIFICATION_FAILED",
+                entity_type="Notification",
+                entity_id=notification.id,
+                user=actor,
+                new_values={
+                    "notification_type": notification.notification_type,
+                    "recipient_phone": notification.recipient_phone,
+                    "status": NotificationStatus.FAILED,
+                    "failure_code": sms_result.failure_code,
+                    "failure_reason": sms_result.failure_reason,
+                },
+                result=AuditResult.FAILURE,
+            )
+            logger.warning(
+                "Notification %s failed to send to %s: %s",
+                notification.id,
+                notification.recipient_phone,
+                sms_result.failure_reason,
+            )
+            # Automatic retry using existing 3-attempt retry policy
+            NotificationRetryService.retry_notification(notification, max_attempts=3, actor=actor)
 
         return notification
 

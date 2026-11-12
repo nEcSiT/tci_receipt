@@ -123,3 +123,25 @@ def extract_first_name_from_provider_name(provider_name: Optional[str]) -> Optio
             return clean_token.capitalize()
 
     return None
+
+
+def validate_phone_number(phone: Optional[str]) -> bool:
+    """
+    Validates that a phone number contains a valid format:
+    optional leading '+', followed by 9 to 15 digits.
+    """
+    if not phone:
+        return False
+    cleaned = clean_phone_number(phone)
+    digits = re.sub(r"\D", "", cleaned)
+    if not (9 <= len(digits) <= 15):
+        return False
+    return bool(re.match(r"^\+?[0-9]{9,15}$", cleaned))
+
+
+def normalize_phone_number(phone: Optional[str]) -> str:
+    """
+    Standardizes a phone number by stripping whitespace and non-digit formatting characters.
+    Preserves digits and optional leading plus sign.
+    """
+    return clean_phone_number(phone)

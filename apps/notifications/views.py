@@ -81,6 +81,92 @@ class NotificationListView(LoginRequiredMixin, View):
         )
 
 
+class NotificationDetailView(LoginRequiredMixin, View):
+    """
+    Detailed operational view of an outbound notification message.
+    Renders the exact saved message without regeneration or side effects.
+    Preserves authorization checks for notification history and related records.
+    """
+
+    def get(self, request, notification_id):
+        if not request.user.is_active or not (
+            request.user.is_system_administrator
+            or request.user.has_permission("notification.view")
+        ):
+            raise PermissionDenied("You do not have permission to view notification details.")
+
+        notification = get_object_or_404(
+            Notification.objects.select_related("template").prefetch_related("attempts"),
+            id=notification_id,
+        )
+
+        attempts = notification.attempts.all().order_by("-attempted_at")
+
+        # Related record resolution and permission checks
+        related_contribution = None
+        can_view_contribution = False
+        related_receipt = None
+        can_view_receipt_record = False
+        related_requisition = None
+        can_view_requisition = False
+
+        if notification.related_record_type == "Contribution" and notification.related_record_id:
+            from apps.contributions.models import Contribution
+            from apps.receipts.models import Receipt
+            from apps.receipts.views import can_view_receipt
+
+            related_contribution = Contribution.objects.filter(id=notification.related_record_id).first()
+            if related_contribution:
+                can_view_contribution = (
+                    request.user.is_system_administrator
+                    or request.user.has_permission("contribution.view")
+                )
+                related_receipt = Receipt.all_objects.filter(contribution=related_contribution).first()
+                if related_receipt:
+                    can_view_receipt_record = can_view_receipt(request.user, related_receipt)
+
+        elif notification.related_record_type == "Receipt" and notification.related_record_id:
+            from apps.receipts.models import Receipt
+            from apps.receipts.views import can_view_receipt
+
+            related_receipt = Receipt.all_objects.filter(id=notification.related_record_id).first()
+            if related_receipt:
+                can_view_receipt_record = can_view_receipt(request.user, related_receipt)
+                related_contribution = related_receipt.contribution
+                if related_contribution:
+                    can_view_contribution = (
+                        request.user.is_system_administrator
+                        or request.user.has_permission("contribution.view")
+                    )
+
+        elif notification.related_record_type == "Requisition" and notification.related_record_id:
+            from apps.requisitions.models import Requisition
+            related_requisition = Requisition.objects.filter(id=notification.related_record_id).first()
+            if related_requisition:
+                can_view_requisition = (
+                    request.user.is_system_administrator
+                    or request.user.has_permission("requisition.view")
+                )
+
+        return_query = request.GET.urlencode()
+
+        return render(
+            request,
+            "notifications/detail.html",
+            {
+                "notification": notification,
+                "attempts": attempts,
+                "related_contribution": related_contribution,
+                "can_view_contribution": can_view_contribution,
+                "related_receipt": related_receipt,
+                "can_view_receipt": can_view_receipt_record,
+                "related_requisition": related_requisition,
+                "can_view_requisition": can_view_requisition,
+                "return_query": return_query,
+            },
+        )
+
+
 class NotificationTemplateListView(LoginRequiredMixin, View):
     """
     Management screen for SMS Notification Templates.
