@@ -118,11 +118,82 @@
       <!-- Other Contribution Description (Shown when "Other" is selected) -->
       <div id="otherDescriptionContainer" style="display: none; margin-bottom: 24px; background: rgba(241, 104, 34, 0.04); border: 1px dashed rgba(241, 104, 34, 0.4); border-radius: 8px; padding: 16px;">
         <label class="form-label" style="display: block; font-weight: 700; color: var(--navy-dark); margin-bottom: 6px;">
-          Other Contribution Description <span style="color: var(--color-orange);">*</span>
+          What is this contribution for? <span style="color: var(--color-orange);">*</span>
         </label>
-        <textarea name="custom_type_description" id="inputCustomDescription" class="form-control" rows="2" placeholder="Specify ministry or appeal purpose (e.g., Youth Ministry Support, Special Mission Appeal)...">{{ form_data.custom_type_description|default:'' }}</textarea>
+        <textarea name="custom_type_description" id="inputCustomDescription" class="form-control" rows="2" placeholder="Specify purpose or appeal (e.g., Youth Ministry Support, Special Mission Appeal)...">{{ form_data.custom_type_description|default:'' }}</textarea>
         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
           When "Other" is selected, the purpose must be described and preserved with the financial record.
+        </div>
+      </div>
+
+      <!-- Welfare Coverage Selection (Shown when "Welfare" is selected) -->
+      <div id="welfareCoverageContainer" style="display: none; margin-bottom: 24px; background: rgba(1, 19, 69, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+          <div>
+            <h4 style="font-size: 14px; font-weight: 700; color: var(--navy-dark); margin: 0;">Welfare Coverage Periods</h4>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+              Select the explicit welfare months and year covered by this payment. Welfare has no fixed dues.
+            </div>
+          </div>
+          <button type="button" id="btnToggleWholeYear" class="btn btn-outline btn-sm" onclick="toggleWholeYear()">
+            Select Whole Year
+          </button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 140px 1fr; gap: 16px; align-items: start;">
+          <div>
+            <label class="form-label" style="font-size: 12px; font-weight: 700; color: var(--navy-dark); display: block; margin-bottom: 4px;">
+              Coverage Year <span style="color: var(--color-orange);">*</span>
+            </label>
+            <input type="number" name="coverage_year" id="inputCoverageYear" class="form-control" value="{{ current_year|default:today_date|slice:':4' }}" min="2000" max="2100" style="height: 38px;">
+          </div>
+
+          <div>
+            <label class="form-label" style="font-size: 12px; font-weight: 700; color: var(--navy-dark); display: block; margin-bottom: 4px;">
+              Covered Months
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;" id="monthCheckboxesGrid">
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="1" class="welfare-month-cb" onchange="updateWelfareSummary()"> Jan
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="2" class="welfare-month-cb" onchange="updateWelfareSummary()"> Feb
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="3" class="welfare-month-cb" onchange="updateWelfareSummary()"> Mar
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="4" class="welfare-month-cb" onchange="updateWelfareSummary()"> Apr
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="5" class="welfare-month-cb" onchange="updateWelfareSummary()"> May
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="6" class="welfare-month-cb" onchange="updateWelfareSummary()"> Jun
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="7" class="welfare-month-cb" onchange="updateWelfareSummary()"> Jul
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="8" class="welfare-month-cb" onchange="updateWelfareSummary()"> Aug
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="9" class="welfare-month-cb" onchange="updateWelfareSummary()"> Sep
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="10" class="welfare-month-cb" onchange="updateWelfareSummary()"> Oct
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="11" class="welfare-month-cb" onchange="updateWelfareSummary()"> Nov
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                <input type="checkbox" name="coverage_months" value="12" class="welfare-month-cb" onchange="updateWelfareSummary()"> Dec
+              </label>
+            </div>
+            <div id="welfareCoverageSummary" style="font-size: 12px; color: var(--navy-dark); font-weight: 600; margin-top: 8px;">
+              No months selected.
+            </div>
+          </div>
         </div>
       </div>
 
@@ -210,6 +281,7 @@
     const typeName = selectedOption ? selectedOption.getAttribute("data-name") : "";
     const otherBox = document.getElementById("otherDescriptionContainer");
     const descInput = document.getElementById("inputCustomDescription");
+    const welfareBox = document.getElementById("welfareCoverageContainer");
 
     if (typeName && typeName.toLowerCase() === "other") {
       otherBox.style.display = "block";
@@ -217,8 +289,46 @@
     } else {
       otherBox.style.display = "none";
       descInput.removeAttribute("required");
+      descInput.value = "";
+    }
+
+    if (typeName && typeName.toLowerCase() === "welfare") {
+      if (welfareBox) welfareBox.style.display = "block";
+    } else {
+      if (welfareBox) welfareBox.style.display = "none";
     }
     updateSummary();
+  }
+
+  function toggleWholeYear() {
+    const cbs = document.querySelectorAll(".welfare-month-cb");
+    const allChecked = Array.from(cbs).every(cb => cb.checked);
+    cbs.forEach(cb => { cb.checked = !allChecked; });
+    const btn = document.getElementById("btnToggleWholeYear");
+    if (btn) {
+      btn.textContent = allChecked ? "Select Whole Year" : "Clear Whole Year";
+    }
+    updateWelfareSummary();
+  }
+
+  function updateWelfareSummary() {
+    const cbs = document.querySelectorAll(".welfare-month-cb:checked");
+    const summaryEl = document.getElementById("welfareCoverageSummary");
+    const yrInput = document.getElementById("inputCoverageYear");
+    const yr = yrInput ? yrInput.value : "";
+    const monthNames = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    if (cbs.length === 0) {
+      summaryEl.textContent = "No months selected.";
+      summaryEl.style.color = "var(--text-muted)";
+    } else if (cbs.length === 12) {
+      summaryEl.textContent = "Selected: Whole Year " + yr + " (Jan – Dec)";
+      summaryEl.style.color = "var(--navy-dark)";
+    } else {
+      const selected = Array.from(cbs).map(cb => monthNames[parseInt(cb.value)]).join(", ");
+      summaryEl.textContent = "Selected: " + selected + " " + yr + " (" + cbs.length + " month" + (cbs.length > 1 ? "s" : "") + ")";
+      summaryEl.style.color = "var(--navy-dark)";
+    }
   }
 
   function onModeChanged() {

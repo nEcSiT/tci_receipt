@@ -2,6 +2,7 @@ import datetime
 import json
 import hashlib
 import hmac
+import uuid
 from decimal import Decimal
 from django.contrib import messages
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -28,6 +29,7 @@ from apps.contributions.services import (
     ContributionService,
     AutomaticPaymentService,
     UssdService,
+    BulkContributionService,
 )
 from apps.members.models import Member, MemberStatus
 
@@ -141,7 +143,7 @@ class ContributionCreateView(View):
         if member_id:
             preselected_member = Member.objects.filter(id=member_id, status=MemberStatus.ACTIVE).first()
 
-        contribution_types = ContributionType.objects.filter(is_active=True)
+        contribution_types = ContributionType.get_recording_categories()
         recent_members = Member.objects.filter(status=MemberStatus.ACTIVE).order_by("-created_at")[:50]
 
         return render(
@@ -170,8 +172,10 @@ class ContributionCreateView(View):
         payment_mode = request.POST.get("payment_mode", "").strip()
         reference_number = request.POST.get("reference_number", "").strip()
         contribution_date = request.POST.get("contribution_date", "").strip()
+        coverage_year = request.POST.get("coverage_year", "").strip()
+        coverage_months = request.POST.getlist("coverage_months")
 
-        contribution_types = ContributionType.objects.filter(is_active=True)
+        contribution_types = ContributionType.get_recording_categories()
         recent_members = Member.objects.filter(status=MemberStatus.ACTIVE).order_by("-created_at")[:50]
 
         # Resolve selected member
@@ -200,6 +204,8 @@ class ContributionCreateView(View):
                 reference_number=reference_number or None,
                 custom_type_description=custom_description or None,
                 contribution_date=contribution_date or None,
+                coverage_year=coverage_year or None,
+                coverage_months=coverage_months or None,
             )
 
             messages.success(
@@ -400,3 +406,374 @@ class UssdGatewayView(View):
             })
 
         return HttpResponse(response_text, content_type="text/plain")
+
+
+class BulkContributionEntryView(View):
+    """
+    On-screen multi-row table entry workflow for recording multiple contributions.
+    Supports church contributions and Welfare through shared validation and atomic saving.
+    """
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_create_permission(request.user):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        # Clear any old preview session
+        request.session.pop("bulk_contrib_valid_rows", None)
+        request.session.pop("bulk_contrib_idempotency_token", None)
+
+        contribution_types = ContributionType.get_recording_categories()
+        today = timezone.localdate()
+
+        return render(
+            request,
+            "contributions/bulk_entry.html",
+            {
+                "contribution_types": contribution_types,
+                "payment_modes": PaymentMode.choices,
+                "today_date": today.isoformat(),
+                "current_year": today.year,
+                "initial_type": request.GET.get("type", ""),
+            },
+        )
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_create_permission(request.user):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        # Parse submitted rows: can be JSON string or array parameters
+        rows_json = request.POST.get("rows_json")
+        rows_data = []
+
+        if rows_json:
+            try:
+                rows_data = json.loads(rows_json)
+            except Exception:
+                rows_data = []
+        else:
+            # Parse form array
+            member_ids = request.POST.getlist("row_member_id")
+            member_idents = request.POST.getlist("row_member_identifier")
+            category_ids = request.POST.getlist("row_category_id")
+            amounts = request.POST.getlist("row_amount")
+            payment_modes = request.POST.getlist("row_payment_mode")
+            payment_dates = request.POST.getlist("row_payment_date")
+            references = request.POST.getlist("row_reference")
+            descriptions = request.POST.getlist("row_description")
+            welfare_years = request.POST.getlist("row_welfare_year")
+            welfare_months_list = request.POST.getlist("row_welfare_months")
+
+            count = max(len(amounts), len(member_ids), len(category_ids))
+            for i in range(count):
+                rows_data.append({
+                    "member_id": member_ids[i] if i < len(member_ids) else "",
+                    "member_identifier": member_idents[i] if i < len(member_idents) else "",
+                    "category_id": category_ids[i] if i < len(category_ids) else "",
+                    "amount": amounts[i] if i < len(amounts) else "",
+                    "currency": "GHS",
+                    "payment_mode": payment_modes[i] if i < len(payment_modes) else "CASH",
+                    "payment_date": payment_dates[i] if i < len(payment_dates) else "",
+                    "reference_number": references[i] if i < len(references) else "",
+                    "custom_type_description": descriptions[i] if i < len(descriptions) else "",
+                    "coverage_year": welfare_years[i] if i < len(welfare_years) else "",
+                    "coverage_months": welfare_months_list[i] if i < len(welfare_months_list) else "",
+                })
+
+        if not rows_data:
+            messages.error(request, "Please enter at least one contribution row.")
+            return redirect("contributions:bulk_entry")
+
+        preview_data = BulkContributionService.parse_and_validate_rows(rows_data, actor=request.user)
+
+        idempotency_token = uuid.uuid4().hex
+        request.session["bulk_contrib_valid_rows"] = preview_data["valid_rows"]
+        request.session["bulk_contrib_idempotency_token"] = idempotency_token
+
+        return render(
+            request,
+            "contributions/bulk_preview.html",
+            {
+                "source": "on-screen",
+                "preview_data": preview_data,
+                "valid_rows_count": preview_data["valid_count"],
+                "idempotency_token": idempotency_token,
+            },
+        )
+
+
+class BulkContributionUploadView(View):
+    """
+    Excel spreadsheet upload workflow for batch church contributions and Welfare.
+    Validates all rows, detects member matches and conflicts, and presents a review screen.
+    """
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_create_permission(request.user):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        request.session.pop("bulk_contrib_valid_rows", None)
+        request.session.pop("bulk_contrib_idempotency_token", None)
+
+        return render(
+            request,
+            "contributions/bulk_upload.html",
+            {},
+        )
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_create_permission(request.user):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        uploaded_file = request.FILES.get("excel_file")
+        if not uploaded_file:
+            messages.error(request, "Please select an Excel (.xlsx) file to upload.")
+            return redirect("contributions:bulk_upload")
+
+        if not uploaded_file.name.endswith(".xlsx"):
+            messages.error(request, "Please upload a valid Microsoft Excel file (.xlsx format).")
+            return redirect("contributions:bulk_upload")
+
+        try:
+            preview_data = BulkContributionService.parse_excel(uploaded_file, actor=request.user)
+        except ValidationError as e:
+            error_msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            messages.error(request, error_msg)
+            return redirect("contributions:bulk_upload")
+
+        idempotency_token = uuid.uuid4().hex
+        request.session["bulk_contrib_valid_rows"] = preview_data["valid_rows"]
+        request.session["bulk_contrib_idempotency_token"] = idempotency_token
+
+        return render(
+            request,
+            "contributions/bulk_preview.html",
+            {
+                "source": "excel",
+                "filename": uploaded_file.name,
+                "preview_data": preview_data,
+                "valid_rows_count": preview_data["valid_count"],
+                "idempotency_token": idempotency_token,
+            },
+        )
+
+
+class BulkContributionTemplateView(View):
+    """Downloads the official Excel template for bulk contributions."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_create_permission(request.user):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        template_bytes = BulkContributionService.generate_template()
+
+        response = HttpResponse(
+            template_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="tci_bulk_contributions_template.xlsx"'
+        return response
+
+
+class BulkContributionConfirmView(View):
+    """
+    Confirms and commits the batch contributions inside an atomic database transaction.
+    Generates individual official receipts, dispatches thank-you SMS, and provides results.
+    """
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_create_permission(request.user):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        valid_rows = request.session.get("bulk_contrib_valid_rows", [])
+        idempotency_token = (
+            request.POST.get("idempotency_token")
+            or request.session.get("bulk_contrib_idempotency_token")
+            or uuid.uuid4().hex
+        )
+
+        if not valid_rows:
+            messages.error(request, "No pending contribution batch was found. Please re-enter or re-upload your contributions.")
+            return redirect("contributions:bulk_entry")
+
+        try:
+            result = BulkContributionService.execute_batch(
+                actor=request.user,
+                valid_rows=valid_rows,
+                idempotency_token=idempotency_token,
+            )
+
+            # Clear session
+            request.session.pop("bulk_contrib_valid_rows", None)
+            request.session.pop("bulk_contrib_idempotency_token", None)
+
+            messages.success(
+                request,
+                f"Successfully recorded {result['count']} contributions (GHS {result['total_amount']:.2f}) "
+                f"and generated individual receipts."
+            )
+
+            return render(
+                request,
+                "contributions/bulk_results.html",
+                {
+                    "result": result,
+                },
+            )
+
+        except (ValidationError, PermissionDenied) as e:
+            error_msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            messages.error(request, error_msg)
+            return redirect("contributions:bulk_entry")
+
+
+class WelfareOverviewView(View):
+    """
+    Dedicated Welfare overview page backed by the same underlying contribution records.
+    Displays member search, year/month filters, payment history, recorded monthly coverage grid,
+    and actions to record welfare individually or in bulk.
+    """
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not check_view_permission(request.user):
+            raise PermissionDenied("You do not have permission to view welfare financial records.")
+
+        from apps.contributions.models import WelfareCoverage
+
+        welfare_type = ContributionType.objects.filter(name__iexact="welfare").first()
+        current_year = timezone.localdate().year
+
+        year_param = request.GET.get("year", "").strip()
+        try:
+            selected_year = int(year_param) if year_param else current_year
+        except ValueError:
+            selected_year = current_year
+
+        month_param = request.GET.get("month", "").strip()
+        try:
+            selected_month = int(month_param) if month_param else None
+            if selected_month and not (1 <= selected_month <= 12):
+                selected_month = None
+        except ValueError:
+            selected_month = None
+
+        query = request.GET.get("q", "").strip()
+        date_from = request.GET.get("date_from", "").strip()
+        date_to = request.GET.get("date_to", "").strip()
+
+        # Query contributions
+        qs = Contribution.objects.filter(contribution_type=welfare_type)
+
+        if query:
+            qs = qs.filter(
+                Q(member__first_name__icontains=query) |
+                Q(member__last_name__icontains=query) |
+                Q(member__member_number__icontains=query) |
+                Q(member__phones__phone_number__icontains=query) |
+                Q(contribution_number__icontains=query)
+            )
+
+        if date_from:
+            qs = qs.filter(contribution_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(contribution_date__lte=date_to)
+
+        if selected_month:
+            qs = qs.filter(
+                welfare_coverages__year=selected_year,
+                welfare_coverages__month=selected_month,
+            )
+        elif selected_year:
+            qs = qs.filter(
+                Q(welfare_coverages__year=selected_year) |
+                Q(contribution_date__year=selected_year)
+            )
+
+        contributions = (
+            qs.distinct()
+            .select_related("member", "receipt", "recorded_by")
+            .prefetch_related("welfare_coverages")
+            .order_by("-contribution_date", "-created_at")
+        )
+
+        # Pagination: 25 items per page
+        paginator = Paginator(contributions, 25)
+        page_number = request.GET.get("page")
+        page_obj = paginator.get_page(page_number)
+
+        # Summary Metrics:
+        # PRD rule: Actual positive amount received counted strictly ONCE (never multiplied by covered months)
+        total_welfare_amount = sum((c.amount for c in contributions), Decimal("0.00"))
+        transactions_count = contributions.count()
+        unique_members_count = contributions.values("member").distinct().count()
+
+        # Total coverage months count across selected contributions
+        covered_slots_count = WelfareCoverage.objects.filter(
+            contribution__in=contributions,
+            year=selected_year,
+        ).count()
+
+        # Monthly Coverage Map by contributing member: {member_id: set([months])}
+        member_coverage = {}
+        contributing_members = []
+        for c in contributions:
+            if c.member and c.member.id not in member_coverage:
+                member_coverage[c.member.id] = set()
+                contributing_members.append(c.member)
+            if c.member:
+                for cov in c.welfare_coverages.all():
+                    if cov.year == selected_year:
+                        member_coverage[c.member.id].add(cov.month)
+
+        member_coverage_rows = []
+        for m in contributing_members[:50]:
+            months_set = member_coverage.get(m.id, set())
+            member_coverage_rows.append({
+                "member": m,
+                "months": {month_num: (month_num in months_set) for month_num in range(1, 13)},
+                "total_covered_months": len(months_set),
+            })
+
+        month_names = [
+            (1, "January"), (2, "February"), (3, "March"), (4, "April"),
+            (5, "May"), (6, "June"), (7, "July"), (8, "August"),
+            (9, "September"), (10, "October"), (11, "November"), (12, "December")
+        ]
+
+        # Year options: current year - 3 to current year + 2
+        years_list = list(range(current_year - 3, current_year + 3))
+
+        return render(
+            request,
+            "contributions/welfare_overview.html",
+            {
+                "page_obj": page_obj,
+                "contributions": page_obj.object_list,
+                "total_welfare_amount": total_welfare_amount,
+                "transactions_count": transactions_count,
+                "unique_members_count": unique_members_count,
+                "covered_slots_count": covered_slots_count,
+                "member_coverage_rows": member_coverage_rows,
+                "selected_year": selected_year,
+                "selected_month": selected_month,
+                "query": query,
+                "date_from": date_from,
+                "date_to": date_to,
+                "month_names": month_names,
+                "years_list": years_list,
+            },
+        )
+

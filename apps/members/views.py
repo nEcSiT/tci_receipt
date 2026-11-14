@@ -849,3 +849,129 @@ class MemberMergeReviewView(View):
             messages.error(request, "; ".join(e.messages) if hasattr(e, "messages") else str(e))
 
         return redirect("members:merge_list")
+
+
+class MemberImportTemplateView(View):
+    """Downloads the official Excel template for bulk member imports."""
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        from apps.members.services import MemberImportService
+        template_bytes = MemberImportService.generate_template()
+
+        response = HttpResponse(
+            template_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="tci_member_import_template.xlsx"'
+        return response
+
+
+class MemberImportView(View):
+    """
+    Workflow for uploading, validating, and previewing member Excel records.
+    Provides clear error highlights, conflict detection, and preview before saving.
+    """
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        # Clear any prior import session data
+        request.session.pop("member_import_valid_rows", None)
+
+        return render(
+            request,
+            "members/member_import.html",
+            {
+                "preview_mode": False,
+            },
+        )
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        uploaded_file = request.FILES.get("excel_file")
+        if not uploaded_file:
+            messages.error(request, "Please select an Excel (.xlsx) file to upload.")
+            return render(request, "members/member_import.html", {"preview_mode": False}, status=400)
+
+        if not uploaded_file.name.endswith(".xlsx"):
+            messages.error(request, "Please upload a valid Excel spreadsheet (.xlsx file).")
+            return render(request, "members/member_import.html", {"preview_mode": False}, status=400)
+
+        from apps.members.services import MemberImportService
+
+        try:
+            preview_data = MemberImportService.parse_and_validate_file(uploaded_file, actor=request.user)
+        except ValidationError as e:
+            error_msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            messages.error(request, error_msg)
+            return render(request, "members/member_import.html", {"preview_mode": False}, status=400)
+
+        # Cache valid rows in session for the confirmation step
+        valid_rows = [r for r in preview_data["rows"] if r["status"] == "READY"]
+        request.session["member_import_valid_rows"] = valid_rows
+        request.session["member_import_filename"] = uploaded_file.name
+
+        return render(
+            request,
+            "members/member_import.html",
+            {
+                "preview_mode": True,
+                "filename": uploaded_file.name,
+                "preview_data": preview_data,
+                "valid_rows_count": len(valid_rows),
+            },
+        )
+
+
+class MemberImportConfirmView(View):
+    """
+    Confirms and executes the creation of validated member rows from Excel.
+    Creates new members through existing MemberService, ensuring no contributions or receipts are created.
+    """
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect(f"/login/?next={request.path}")
+        if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        valid_rows = request.session.get("member_import_valid_rows", [])
+        if not valid_rows:
+            messages.error(request, "No pending member import rows were found. Please re-upload your Excel file.")
+            return redirect("members:member_import")
+
+        from apps.members.services import MemberImportService
+
+        try:
+            result = MemberImportService.execute_import(actor=request.user, valid_rows=valid_rows)
+            # Clear session
+            request.session.pop("member_import_valid_rows", None)
+            request.session.pop("member_import_filename", None)
+
+            messages.success(
+                request,
+                f"Successfully imported {result['imported_count']} church members."
+            )
+            return render(
+                request,
+                "members/member_import_results.html",
+                {
+                    "result": result,
+                },
+            )
+        except ValidationError as e:
+            error_msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            messages.error(request, error_msg)
+            return redirect("members:member_import")

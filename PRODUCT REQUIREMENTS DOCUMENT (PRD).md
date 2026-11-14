@@ -1690,9 +1690,10 @@ represented on main. It must not be blindly merged into production.
 
 # 31. Next phase — bulk contribution recording and welfare
 
-Status: stakeholder-approved scope; implementation pending. This phase follows
-consolidation of the current work into main. Normal development PRs continue to
-use feature-branch; the 12 November main merge authorization is a release exception.
+Status: stakeholder-approved scope; core features implemented on development branch
+`feat/bulk-contributions-member-import-welfare` targeting `feature-branch`. This phase
+follows consolidation of the current work into main. Normal development PRs continue
+to use `feature-branch`.
 
 ## 31.1 Approved bulk contribution workflow
 
@@ -1800,3 +1801,36 @@ Verify desktop/mobile screens against TCI-HLC-design.md and use client-friendly
 wording rather than technical errors. These are approved requirements, not completed
 features. Keep the PRD updated in each implementation PR and distinguish approved,
 implemented and pending work. All development PRs target feature-branch.
+
+## 31.8 Implemented functionality status
+
+As implemented on branch `feat/bulk-contributions-member-import-welfare`:
+
+1. **Category Ordering & Other Description**:
+   - `ContributionType.get_recording_categories()` ensures "Other" is strictly last in recording selectors, preserving other category orders and IDs.
+   - When "Other" is chosen, "What is this contribution for?" (`custom_type_description`) is strictly validated as mandatory on model, forms, and Excel imports. Blank/whitespace-only input is rejected.
+   - Changing categories away from "Other" clears the custom description.
+
+2. **Member Excel Import Workflow**:
+   - `MemberImportService` generates a styled `.xlsx` template with documented headers, example rows, and phone text preservation instructions (`@` format to keep leading zeroes).
+   - Validation detects within-file duplicates, phone conflicts against existing members, and invalid rows before saving.
+   - Confirmation creates members through `MemberService` without generating extraneous contributions, receipts, or transactional SMS.
+
+3. **Dual Bulk Contribution Recording**:
+   - On-screen dynamic table (`/contributions/bulk/`) and Excel upload (`/contributions/bulk/upload/`).
+   - Shared validation engine (`BulkContributionService.parse_and_validate_rows`).
+   - Review and preview screen (`bulk_preview.html`) displays row-by-row status, matched members, proposed new members, and validation errors.
+   - Atomic database commit with idempotency protection preventing duplicate creation on replay/refresh.
+   - Issues individual official receipts (`HLC-XXXXXXX`) and category-tailored SMS upon successful commit.
+
+4. **Flexible Welfare Contribution Management**:
+   - No artificial dues, fixed quotas, or balances imposed.
+   - Supports explicit year and flexible months selection ("Whole Year" = 1–12, individual months, or multiple months).
+   - Dedicated Welfare Overview page (`/contributions/welfare/`) with member search, year/month filters, coverage metrics, 12-month coverage matrix grid, and direct receipt access.
+   - Annual payments are counted strictly once in financial totals (never multiplied by 12).
+   - Receipt detail, public verification, and PDF render coverage periods (e.g. `Whole Year 2026 (Jan – Dec)`).
+
+5. **Pending Decisions Maintained**:
+   - Welfare participant enrolment policy remains open (currently surfaces contributing members without auto-classifying all church members as debtors).
+   - Multi-category/multi-date flexibility is supported per row without enforcing artificial single-date constraints.
+   - Explicit monetary allocation by coverage month is not invented; actual received amounts remain intact.

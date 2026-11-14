@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Import Members from Excel — TCI Higher Life Center{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+  <div>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">
+      <a href="{% url 'core:dashboard' %}" style="color: var(--text-secondary); text-decoration: none;">Dashboard</a> &rsaquo;
+      <a href="{% url 'members:member_list' %}" style="color: var(--text-secondary); text-decoration: none;">Members</a> &rsaquo;
+      <span>Import from Excel</span>
+    </div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      Import Members from Excel
+    </h1>
+    <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
+      Batch register church members using the verified Excel template with automatic duplicate detection.
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px;">
+    <a href="{% url 'members:member_import_template' %}" class="btn btn-outline">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download Template (.xlsx)
+    </a>
+    <a href="{% url 'members:member_list' %}" class="btn btn-outline">
+      Back to Members
+    </a>
+  </div>
+</div>
+
+{% if not preview_mode %}
+<!-- Step 1: Upload Workflow -->
+<div style="display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start;">
+  <!-- Upload Card -->
+  <div class="card" style="padding: 28px;">
+    <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin-bottom: 8px;">
+      Upload Member Spreadsheet
+    </h3>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
+      Upload your completed <code>.xlsx</code> file. All rows will be validated, previewed, and checked for conflicts before any records are created.
+    </div>
+
+    <form method="post" enctype="multipart/form-data" action="{% url 'members:member_import' %}" id="importForm">
+      {% csrf_token %}
+      
+      <div style="border: 2px dashed var(--border-color); border-radius: 8px; padding: 36px 20px; text-align: center; background: var(--bg-surface); cursor: pointer; transition: border-color 0.2s;" id="dropzone" onclick="document.getElementById('excelFileInput').click();">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--navy-dark)" stroke-width="1.5" style="margin-bottom: 12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size: 15px; font-weight: 600; color: var(--navy-dark); margin-bottom: 4px;">
+          Click to choose or drag and drop your completed spreadsheet
+        </div>
+        <div style="font-size: 13px; color: var(--text-secondary);">
+          Supported file format: Microsoft Excel (<code>.xlsx</code>)
+        </div>
+        <input type="file" name="excel_file" id="excelFileInput" accept=".xlsx" required style="display: none;" onchange="onFileSelected(this)">
+        <div id="selectedFilename" style="margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--color-orange); display: none;"></div>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+        <button type="submit" class="btn btn-primary" id="btnUploadPreview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Validate & Preview Spreadsheet
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Instructions Sidecard -->
+  <div class="card" style="padding: 24px; background: rgba(1, 19, 69, 0.02); border: 1px solid var(--border-color);">
+    <h4 style="font-size: 14px; font-weight: 700; color: var(--navy-dark); margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+      Template Schema Requirements
+    </h4>
+    <ul style="font-size: 13px; color: var(--text-secondary); padding-left: 18px; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+      <li><strong>First Name & Last Name:</strong> Required for each member.</li>
+      <li><strong>Phone Number:</strong> Format as text (e.g. <code>0241234567</code> or <code>+233241234567</code>) so leading zero is not lost.</li>
+      <li><strong>Duplicates:</strong> Existing active member phone numbers are protected from duplicate creation.</li>
+      <li><strong>Optional Details:</strong> Middle Name, Email, Ministry, Team, Department.</li>
+      <li><strong>Integrity:</strong> Importing members does not create contributions or send transactional SMS.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  function onFileSelected(input) {
+    const fnBox = document.getElementById("selectedFilename");
+    if (input.files && input.files[0]) {
+      fnBox.textContent = "Selected: " + input.files[0].name;
+      fnBox.style.display = "block";
+    } else {
+      fnBox.style.display = "none";
+    }
+  }
+</script>
+
+{% else %}
+<!-- Step 2: Preview & Validation Screen -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+  <div class="card" style="padding: 18px;">
+    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total Rows Found</div>
+    <div style="font-size: 26px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">{{ preview_data.total_rows }}</div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid var(--color-green);">
+    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Ready to Register</div>
+    <div style="font-size: 26px; font-weight: 700; color: var(--color-green); margin-top: 4px;">{{ preview_data.valid_count }}</div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid var(--color-orange);">
+    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Phone Conflicts</div>
+    <div style="font-size: 26px; font-weight: 700; color: var(--color-orange); margin-top: 4px;">{{ preview_data.conflict_count }}</div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid #dc3545;">
+    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Validation Errors</div>
+    <div style="font-size: 26px; font-weight: 700; color: #dc3545; margin-top: 4px;">{{ preview_data.error_count }}</div>
+  </div>
+</div>
+
+<div class="card" style="padding: 24px; margin-bottom: 24px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+    <div>
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+        Review Spreadsheet Rows ({{ filename }})
+      </h3>
+      <div style="font-size: 13px; color: var(--text-secondary); margin-top: 2px;">
+        Inspect individual row validation. Rows marked with conflicts or errors will not be created.
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <a href="{% url 'members:member_import' %}" class="btn btn-outline btn-sm">
+        Upload Different File
+      </a>
+      {% if valid_rows_count > 0 %}
+      <form method="post" action="{% url 'members:member_import_confirm' %}" style="margin: 0;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm" onclick="this.disabled=true; this.form.submit();">
+          Confirm Import ({{ valid_rows_count }} member{{ valid_rows_count|pluralize }})
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width: 50px;">Row</th>
+          <th>Full Name</th>
+          <th>Phone Number</th>
+          <th>Email</th>
+          <th>Ministry / Team</th>
+          <th>Status</th>
+          <th>Validation / Conflict Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in preview_data.rows %}
+        <tr style="{% if r.status == 'CONFLICT' %}background: rgba(241, 104, 34, 0.04);{% elif r.status == 'ERROR' %}background: rgba(220, 53, 69, 0.04);{% endif %}">
+          <td style="font-weight: 600; color: var(--text-secondary);">#{{ r.row_number }}</td>
+          <td style="font-weight: 700; color: var(--navy-dark);">
+            {{ r.first_name }} {% if r.middle_name %}{{ r.middle_name }} {% endif %}{{ r.last_name }}
+          </td>
+          <td>
+            {% if r.phone_number %}
+              <code>{{ r.phone_number }}</code>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 12px;">(none)</span>
+            {% endif %}
+          </td>
+          <td style="font-size: 13px; color: var(--text-secondary);">
+            {{ r.email|default:"—" }}
+          </td>
+          <td style="font-size: 13px; color: var(--text-secondary);">
+            {{ r.ministry|default:r.team|default:"—" }}
+          </td>
+          <td>
+            {% if r.status == 'READY' %}
+              <span class="badge badge-success">Ready to Register</span>
+            {% elif r.status == 'CONFLICT' %}
+              <span class="badge badge-warning">Phone Conflict</span>
+            {% else %}
+              <span class="badge badge-danger">Invalid Row</span>
+            {% endif %}
+          </td>
+          <td style="font-size: 12px;">
+            {% if r.errors %}
+              <div style="color: #dc3545; font-weight: 600;">
+                {% for err in r.errors %}
+                  <div>{{ err }}</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: var(--color-green); font-weight: 600;">Valid record</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">
+            No data rows found in uploaded file.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

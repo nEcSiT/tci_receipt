@@ -224,6 +224,11 @@
             Purpose: <em>{{ contribution.custom_type_description }}</em>
           </div>
           {% endif %}
+          {% if contribution.welfare_coverage_display %}
+          <div style="font-size: 12px; color: var(--navy-dark); font-weight: 600; margin-top: 4px; background: rgba(1, 19, 69, 0.05); padding: 4px 8px; border-radius: 4px;">
+            Covered: {{ contribution.welfare_coverage_display }}
+          </div>
+          {% endif %}
         </div>
 
         <div>

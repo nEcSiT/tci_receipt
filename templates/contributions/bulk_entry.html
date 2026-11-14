@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Contribution Entry — TCI Higher Life Center{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+  <div>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">
+      <a href="{% url 'core:dashboard' %}" style="color: var(--text-secondary); text-decoration: none;">Dashboard</a> &rsaquo;
+      <a href="{% url 'contributions:contribution_list' %}" style="color: var(--text-secondary); text-decoration: none;">Contributions</a> &rsaquo;
+      <span>Bulk Entry</span>
+    </div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      Bulk Contribution Recording
+    </h1>
+    <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
+      Record multiple member payments across church categories and Welfare in a single audited batch.
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px;">
+    <a href="{% url 'contributions:bulk_upload' %}" class="btn btn-outline">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload from Excel
+    </a>
+    <a href="{% url 'contributions:contribution_create' %}" class="btn btn-outline">
+      Single Entry
+    </a>
+  </div>
+</div>
+
+<form method="post" action="{% url 'contributions:bulk_entry' %}" id="bulkEntryForm">
+  {% csrf_token %}
+  <input type="hidden" name="rows_json" id="rowsJsonInput">
+
+  <div class="card" style="padding: 24px; margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+        Contribution Rows
+      </h3>
+      <span style="font-size: 13px; color: var(--text-secondary);" id="rowCountBadge">1 row</span>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table" id="bulkTable" style="margin-bottom: 0;">
+        <thead>
+          <tr>
+            <th style="width: 40px;">#</th>
+            <th style="min-width: 240px;">Member <span style="color: var(--color-orange);">*</span></th>
+            <th style="min-width: 170px;">Category <span style="color: var(--color-orange);">*</span></th>
+            <th style="min-width: 130px;">Amount (GHS) <span style="color: var(--color-orange);">*</span></th>
+            <th style="min-width: 150px;">Payment Mode <span style="color: var(--color-orange);">*</span></th>
+            <th style="min-width: 140px;">Payment Date <span style="color: var(--color-orange);">*</span></th>
+            <th style="min-width: 140px;">Reference #</th>
+            <th style="min-width: 220px;">Category Details / Coverage</th>
+            <th style="width: 50px;"></th>
+          </tr>
+        </thead>
+        <tbody id="rowsTbody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+      <button type="button" class="btn btn-outline btn-sm" onclick="addRow()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Another Row
+      </button>
+
+      <div style="display: flex; align-items: center; gap: 20px;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--navy-dark);">
+          Batch Total: <span style="color: var(--color-orange); font-size: 18px; font-weight: 700;" id="tableTotalDisplay">GHS 0.00</span>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="submitBulkForm()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Validate & Review Contributions
+        </button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<!-- Modal: Quick Register New Member -->
+<div id="newMemberModal" style="display: none; position: fixed; inset: 0; background: rgba(1, 19, 69, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="card" style="width: 500px; max-width: 95vw; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+      <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+        Register New Church Member
+      </h3>
+      <button type="button" onclick="closeNewMemberModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: var(--text-muted);">&times;</button>
+    </div>
+
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+      Register a new member to attach to row #<span id="targetRowDisplay"></span>. Member number will be generated automatically.
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+      <div>
+        <label class="form-label" style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">First Name *</label>
+        <input type="text" id="modalFirstName" class="form-control" placeholder="e.g. Kwame">
+      </div>
+      <div>
+        <label class="form-label" style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Last Name *</label>
+        <input type="text" id="modalLastName" class="form-control" placeholder="e.g. Mensah">
+      </div>
+    </div>
+
+    <div style="margin-bottom: 18px;">
+      <label class="form-label" style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Phone Number (Text, preserving leading 0)</label>
+      <input type="text" id="modalPhone" class="form-control" placeholder="e.g. 0241234567 or +233241234567">
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">Unique mobile number for automated thank-you SMS and receipt access.</div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+      <button type="button" class="btn btn-outline btn-sm" onclick="closeNewMemberModal()">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveNewMemberForActiveRow()">Attach to Row</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const categories = [
+    {% for ct in contribution_types %}
+    { id: "{{ ct.id }}", name: "{{ ct.name }}" },
+    {% endfor %}
+  ];
+
+  const paymentModes = [
+    {% for code, label in payment_modes %}
+    { code: "{{ code }}", label: "{{ label }}" },
+    {% endfor %}
+  ];
+
+  const defaultDate = "{{ today_date }}";
+  const currentYear = "{{ current_year }}";
+  const initialType = "{{ initial_type }}";
+
+  let rows = [];
+  let rowCounter = 0;
+  let activeModalRowIndex = null;
+
+  function addRow(data = {}) {
+    rowCounter++;
+    const rowId = rowCounter;
+
+    // Default category to initialType or first category
+    let defaultCatId = categories.length > 0 ? categories[0].id : "";
+    if (initialType) {
+      const match = categories.find(c => c.name.toLowerCase() === initialType.toLowerCase());
+      if (match) defaultCatId = match.id;
+    }
+
+    const rowObj = {
+      id: rowId,
+      member_id: data.member_id || "",
+      member_identifier: data.member_identifier || "",
+      member_display: data.member_display || "",
+      new_member: data.new_member || null,
+      category_id: data.category_id || defaultCatId,
+      amount: data.amount || "",
+      payment_mode: data.payment_mode || "CASH",
+      payment_date: data.payment_date || defaultDate,
+      reference_number: data.reference_number || "",
+      custom_type_description: data.custom_type_description || "",
+      coverage_year: data.coverage_year || currentYear,
+      coverage_months: data.coverage_months || "Whole Year",
+    };
+
+    rows.push(rowObj);
+    renderRows();
+  }
+
+  function renderRows() {
+    const tbody = document.getElementById("rowsTbody");
+    tbody.innerHTML = "";
+
+    rows.forEach((r, idx) => {
+      const tr = document.createElement("tr");
+      tr.id = `row-${r.id}`;
+
+      // Check category type
+      const catObj = categories.find(c => c.id === r.category_id);
+      const catName = catObj ? catObj.name.toLowerCase() : "";
+      const isOther = catName === "other";
+      const isWelfare = catName === "welfare";
+
+      let catDetailsHtml = "";
+      if (isOther) {
+        catDetailsHtml = `
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--navy-dark); display: block; margin-bottom: 2px;">What is this contribution for? *</label>
+            <input type="text" class="form-control form-control-sm" placeholder="Specify purpose..." value="${r.custom_type_description}" oninput="updateRowField(${r.id}, 'custom_type_description', this.value)" style="height: 32px; font-size: 12px;" required>
+          </div>
+        `;
+      } else if (isWelfare) {
+        catDetailsHtml = `
+          <div style="display: grid; grid-template-columns: 80px 1fr; gap: 6px;">
+            <div>
+              <label style="font-size: 10px; font-weight: 600; display: block;">Year</label>
+              <input type="number" class="form-control form-control-sm" value="${r.coverage_year}" min="2000" max="2100" onchange="updateRowField(${r.id}, 'coverage_year', this.value)" style="height: 30px; font-size: 11px;">
+            </div>
+            <div>
+              <label style="font-size: 10px; font-weight: 600; display: block;">Coverage Months</label>
+              <input type="text" class="form-control form-control-sm" placeholder="e.g. Whole Year or Jan, Feb" value="${r.coverage_months}" oninput="updateRowField(${r.id}, 'coverage_months', this.value)" style="height: 30px; font-size: 11px;">
+            </div>
+          </div>
+        `;
+      } else {
+        catDetailsHtml = `<span style="color: var(--text-muted); font-size: 12px;">Standard Category</span>`;
+      }
+
+      tr.innerHTML = `
+        <td style="font-weight: 600; color: var(--text-secondary); vertical-align: middle;">${idx + 1}</td>
+        <td>
+          <div style="position: relative;">
+            <div id="memberDisplayBox-${r.id}" style="${r.member_display ? 'display: block;' : 'display: none;'} background: rgba(1, 19, 69, 0.05); padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+              <span id="memberText-${r.id}" style="font-weight: 700; color: var(--navy-dark);">${r.member_display}</span>
+              <button type="button" onclick="clearMember(${r.id})" style="border: none; background: none; color: #dc3545; cursor: pointer; font-size: 14px;">&times;</button>
+            </div>
+            <div id="memberInputBox-${r.id}" style="${r.member_display ? 'display: none;' : 'display: flex; gap: 6px;'}">
+              <input type="text" id="memberSearchInput-${r.id}" class="form-control form-control-sm" placeholder="Search name, MEM-001, phone..." oninput="handleMemberSearch(${r.id}, this.value)" style="height: 34px; font-size: 12px;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="openNewMemberModal(${r.id})" title="Register New Member" style="padding: 2px 8px; white-space: nowrap; font-size: 11px;">
+                + New
+              </button>
+            </div>
+            <div id="searchResults-${r.id}" style="display: none; position: absolute; left: 0; right: 0; top: 38px; background: white; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 50; max-height: 180px; overflow-y: auto;"></div>
+          </div>
+        </td>
+        <td>
+          <select class="form-control form-control-sm" onchange="onCategoryChanged(${r.id}, this.value)" style="height: 34px; font-size: 13px;">
+            ${categories.map(c => `<option value="${c.id}" ${c.id === r.category_id ? 'selected' : ''}>${c.name}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <input type="number" step="0.01" min="0.01" class="form-control form-control-sm" placeholder="0.00" value="${r.amount}" oninput="updateRowField(${r.id}, 'amount', this.value); updateTableTotal();" style="height: 34px; font-weight: 700; font-size: 13px; text-align: right;" required>
+        </td>
+        <td>
+          <select class="form-control form-control-sm" onchange="updateRowField(${r.id}, 'payment_mode', this.value)" style="height: 34px; font-size: 12px;">
+            ${paymentModes.map(m => `<option value="${m.code}" ${m.code === r.payment_mode ? 'selected' : ''}>${m.label}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <input type="date" class="form-control form-control-sm" value="${r.payment_date}" onchange="updateRowField(${r.id}, 'payment_date', this.value)" style="height: 34px; font-size: 12px;">
+        </td>
+        <td>
+          <input type="text" class="form-control form-control-sm" placeholder="Ref / MoMo #" value="${r.reference_number}" oninput="updateRowField(${r.id}, 'reference_number', this.value)" style="height: 34px; font-size: 12px;">
+        </td>
+        <td>
+          ${catDetailsHtml}
+        </td>
+        <td style="text-align: center; vertical-align: middle;">
+          ${rows.length > 1 ? `<button type="button" onclick="removeRow(${r.id})" style="border: none; background: none; color: #dc3545; cursor: pointer; font-size: 18px;" title="Remove Row">&times;</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("rowCountBadge").textContent = `${rows.length} row${rows.length > 1 ? 's' : ''}`;
+    updateTableTotal();
+  }
+
+  function updateRowField(id, field, val) {
+    const r = rows.find(x => x.id === id);
+    if (r) {
+      r[field] = val;
+    }
+  }
+
+  function onCategoryChanged(id, catId) {
+    const r = rows.find(x => x.id === id);
+    if (r) {
+      r.category_id = catId;
+      const catObj = categories.find(c => c.id === catId);
+      if (catObj && catObj.name.toLowerCase() !== "other") {
+        r.custom_type_description = "";
+      }
+      renderRows();
+    }
+  }
+
+  function removeRow(id) {
+    rows = rows.filter(r => r.id !== id);
+    renderRows();
+  }
+
+  function updateTableTotal() {
+    let total = 0;
+    rows.forEach(r => {
+      const amt = parseFloat(r.amount);
+      if (!isNaN(amt) && amt > 0) {
+        total += amt;
+      }
+    });
+    document.getElementById("tableTotalDisplay").textContent = `GHS ${total.toFixed(2)}`;
+  }
+
+  // Member Search
+  let searchTimeouts = {};
+  function handleMemberSearch(rowId, q) {
+    clearTimeout(searchTimeouts[rowId]);
+    const box = document.getElementById(`searchResults-${rowId}`);
+    if (!q || q.trim().length < 2) {
+      box.style.display = "none";
+      return;
+    }
+
+    searchTimeouts[rowId] = setTimeout(() => {
+      fetch("/contributions/members/search/?q=" + encodeURIComponent(q.trim()))
+        .then(res => res.json())
+        .then(data => {
+          box.innerHTML = "";
+          if (!data.results || data.results.length === 0) {
+            box.innerHTML = "<div style='padding: 8px 12px; color: var(--text-muted); font-size: 12px;'>No members found.</div>";
+            box.style.display = "block";
+            return;
+          }
+          data.results.forEach(m => {
+            const div = document.createElement("div");
+            div.style.cssText = "padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 12px; display: flex; justify-content: space-between;";
+            div.onmouseover = () => { div.style.background = "var(--bg-surface)"; };
+            div.onmouseout = () => { div.style.background = "white"; };
+            div.innerHTML = `<div><strong>${m.full_name}</strong> <code>${m.member_number}</code></div><span style='color: var(--text-secondary); font-size: 11px;'>${m.phone || ''}</span>`;
+            div.onclick = () => {
+              selectMemberForRow(rowId, m);
+              box.style.display = "none";
+            };
+            box.appendChild(div);
+          });
+          box.style.display = "block";
+        });
+    }, 250);
+  }
+
+  function selectMemberForRow(rowId, m) {
+    const r = rows.find(x => x.id === rowId);
+    if (r) {
+      r.member_id = m.id;
+      r.member_identifier = m.member_number;
+      r.member_display = `${m.full_name} (${m.member_number})`;
+      r.new_member = null;
+      renderRows();
+    }
+  }
+
+  function clearMember(rowId) {
+    const r = rows.find(x => x.id === rowId);
+    if (r) {
+      r.member_id = "";
+      r.member_identifier = "";
+      r.member_display = "";
+      r.new_member = null;
+      renderRows();
+    }
+  }
+
+  // Modal: Register New Member for row
+  function openNewMemberModal(rowId) {
+    activeModalRowIndex = rowId;
+    document.getElementById("targetRowDisplay").textContent = rows.findIndex(x => x.id === rowId) + 1;
+    document.getElementById("modalFirstName").value = "";
+    document.getElementById("modalLastName").value = "";
+    document.getElementById("modalPhone").value = "";
+    document.getElementById("newMemberModal").style.display = "flex";
+  }
+
+  function closeNewMemberModal() {
+    document.getElementById("newMemberModal").style.display = "none";
+    activeModalRowIndex = null;
+  }
+
+  function saveNewMemberForActiveRow() {
+    const fn = document.getElementById("modalFirstName").value.trim();
+    const ln = document.getElementById("modalLastName").value.trim();
+    const ph = document.getElementById("modalPhone").value.trim();
+
+    if (!fn || !ln) {
+      alert("First name and last name are required.");
+      return;
+    }
+
+    const r = rows.find(x => x.id === activeModalRowIndex);
+    if (r) {
+      r.member_id = "";
+      r.member_identifier = ph || `${fn} ${ln}`;
+      r.member_display = `Proposed: ${fn} ${ln}` + (ph ? ` (${ph})` : "");
+      r.new_member = {
+        first_name: fn,
+        last_name: ln,
+        phone_number: ph
+      };
+      closeNewMemberModal();
+      renderRows();
+    }
+  }
+
+  function submitBulkForm() {
+    // Validate that at least 1 row has amount and member
+    if (rows.length === 0) {
+      alert("Please add at least one row.");
+      return;
+    }
+
+    const payload = rows.map(r => ({
+      member_id: r.member_id,
+      member_identifier: r.member_identifier,
+      new_member_first_name: r.new_member ? r.new_member.first_name : "",
+      new_member_last_name: r.new_member ? r.new_member.last_name : "",
+      new_member_phone: r.new_member ? r.new_member.phone_number : "",
+      category_id: r.category_id,
+      amount: r.amount,
+      currency: "GHS",
+      payment_mode: r.payment_mode,
+      payment_date: r.payment_date,
+      reference_number: r.reference_number,
+      custom_type_description: r.custom_type_description,
+      coverage_year: r.coverage_year,
+      coverage_months: r.coverage_months,
+    }));
+
+    document.getElementById("rowsJsonInput").value = JSON.stringify(payload);
+    document.getElementById("bulkEntryForm").submit();
+  }
+
+  // Initial row
+  document.addEventListener("DOMContentLoaded", () => {
+    addRow();
+  });
+</script>
+{% endblock %}

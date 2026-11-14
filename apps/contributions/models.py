@@ -51,6 +51,17 @@ class ContributionType(UUIDBaseModel):
         verbose_name_plural = "Contribution Types"
         ordering = ["name"]
 
+    @classmethod
+    def get_recording_categories(cls):
+        """
+        Returns active contribution types for recording forms with 'Other' positioned strictly last,
+        preserving the established order of all other categories without altering identifiers or names.
+        """
+        active_types = list(cls.objects.filter(is_active=True).order_by("name"))
+        other = [t for t in active_types if t.name.strip().lower() == "other"]
+        non_other = [t for t in active_types if t.name.strip().lower() != "other"]
+        return non_other + other
+
     def __str__(self):
         return self.name
 
@@ -192,11 +203,44 @@ class Contribution(UUIDBaseModel):
         if self.contribution_type_id:
             try:
                 c_type = self.contribution_type
-                if c_type and c_type.name.strip().lower() == "other":
-                    if not self.custom_type_description or not self.custom_type_description.strip():
-                        raise ValidationError("Description is required when contribution type is 'Other'.")
             except Exception:
-                pass
+                c_type = None
+
+            if c_type and c_type.name.strip().lower() == "other":
+                if not self.custom_type_description or not self.custom_type_description.strip():
+                    raise ValidationError("Description is required when contribution type is 'Other'.")
+            elif c_type:
+                self.custom_type_description = None
+
+    @property
+    def welfare_coverage_display(self) -> str:
+        """
+        Returns human-readable summary of welfare covered months, e.g.:
+        'Jan – Dec 2026' or 'Jan, Feb, Mar 2026'.
+        """
+        coverages = list(self.welfare_coverages.order_by("year", "month"))
+        if not coverages:
+            return ""
+
+        by_year = {}
+        for c in coverages:
+            by_year.setdefault(c.year, []).append(c.month)
+
+        month_names = {
+            1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr",
+            5: "May", 6: "Jun", 7: "Jul", 8: "Aug",
+            9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+        }
+
+        parts = []
+        for yr, months in sorted(by_year.items()):
+            months_sorted = sorted(set(months))
+            if len(months_sorted) == 12:
+                parts.append(f"Whole Year {yr} (Jan – Dec)")
+            else:
+                m_str = ", ".join(month_names[m] for m in months_sorted)
+                parts.append(f"{m_str} {yr}")
+        return "; ".join(parts)
 
     def save(self, *args, **kwargs):
         if not self.contribution_number:
@@ -212,3 +256,51 @@ class Contribution(UUIDBaseModel):
     def __str__(self):
         contributor = self.member.full_name if self.member else str(self.temporary_contributor)
         return f"{self.contribution_number} - {contributor}: {self.amount} {self.currency}"
+
+
+class WelfareCoverage(UUIDBaseModel):
+    """
+    Explicit monthly coverage records for Welfare contributions.
+    Table: welfare_coverages
+    """
+    MONTH_CHOICES = [
+        (1, "January"),
+        (2, "February"),
+        (3, "March"),
+        (4, "April"),
+        (5, "May"),
+        (6, "June"),
+        (7, "July"),
+        (8, "August"),
+        (9, "September"),
+        (10, "October"),
+        (11, "November"),
+        (12, "December"),
+    ]
+
+    contribution = models.ForeignKey(
+        Contribution,
+        on_delete=models.CASCADE,
+        related_name="welfare_coverages"
+    )
+    year = models.IntegerField(db_index=True)
+    month = models.PositiveSmallIntegerField(choices=MONTH_CHOICES, db_index=True)
+
+    class Meta:
+        db_table = "welfare_coverages"
+        verbose_name = "Welfare Coverage"
+        verbose_name_plural = "Welfare Coverages"
+        ordering = ["year", "month"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["contribution", "year", "month"],
+                name="unique_contribution_welfare_coverage"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(month__gte=1) & models.Q(month__lte=12),
+                name="valid_welfare_month_range"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_month_display()} {self.year} ({self.contribution.contribution_number})"

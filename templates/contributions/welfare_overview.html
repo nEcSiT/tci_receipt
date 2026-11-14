@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+
+{% block title %}Welfare Contribution Management — TCI Higher Life Center{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+  <div>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">
+      <a href="{% url 'core:dashboard' %}" style="color: var(--text-secondary); text-decoration: none;">Dashboard</a> &rsaquo;
+      <a href="{% url 'contributions:contribution_list' %}" style="color: var(--text-secondary); text-decoration: none;">Contributions</a> &rsaquo;
+      <span>Welfare</span>
+    </div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      Welfare Contribution Management
+    </h1>
+    <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
+      Flexible welfare contributions, monthly coverage tracking, and verified financial receipts.
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="{% url 'contributions:contribution_create' %}?type=welfare" class="btn btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Record Welfare
+    </a>
+    <a href="{% url 'contributions:bulk_entry' %}?type=welfare" class="btn btn-outline">
+      Bulk Entry
+    </a>
+    <a href="{% url 'contributions:bulk_upload' %}" class="btn btn-outline">
+      Upload Excel
+    </a>
+  </div>
+</div>
+
+<!-- Metrics Cards -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+  <div class="card" style="padding: 18px; border-left: 4px solid var(--color-orange);">
+    <div style="font-size: 12px; color: var(--color-orange); text-transform: uppercase; font-weight: 600;">Total Welfare Received</div>
+    <div style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">
+      GHS {{ total_welfare_amount|floatformat:2 }}
+    </div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid var(--navy-dark);">
+    <div style="font-size: 12px; color: var(--navy-dark); text-transform: uppercase; font-weight: 600;">Welfare Payments</div>
+    <div style="font-size: 26px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">
+      {{ transactions_count }}
+    </div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid #0b7a42;">
+    <div style="font-size: 12px; color: #0b7a42; text-transform: uppercase; font-weight: 600;">Contributing Members</div>
+    <div style="font-size: 26px; font-weight: 700; color: #0b7a42; margin-top: 4px;">
+      {{ unique_members_count }}
+    </div>
+  </div>
+  <div class="card" style="padding: 18px;">
+    <div style="font-size: 12px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Months Covered ({{ selected_year }})</div>
+    <div style="font-size: 26px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">
+      {{ covered_slots_count }}
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card" style="padding: 20px 24px; margin-bottom: 24px;">
+  <form method="get" action="{% url 'contributions:welfare_overview' %}" style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 14px; align-items: flex-end;">
+    <div>
+      <label style="display: block; font-size: 12px; font-weight: 600; color: var(--navy-dark); margin-bottom: 4px;">Search Member or Receipt</label>
+      <input type="text" name="q" value="{{ query }}" placeholder="Name, member #, phone, receipt #" class="form-control" style="width: 100%;">
+    </div>
+
+    <div>
+      <label style="display: block; font-size: 12px; font-weight: 600; color: var(--navy-dark); margin-bottom: 4px;">Coverage Year</label>
+      <select name="year" class="form-control" style="width: 100%;">
+        {% for yr in years_list %}
+          <option value="{{ yr }}" {% if yr == selected_year %}selected{% endif %}>{{ yr }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label style="display: block; font-size: 12px; font-weight: 600; color: var(--navy-dark); margin-bottom: 4px;">Coverage Month</label>
+      <select name="month" class="form-control" style="width: 100%;">
+        <option value="">All Months</option>
+        {% for num, name in month_names %}
+          <option value="{{ num }}" {% if num == selected_month %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label style="display: block; font-size: 12px; font-weight: 600; color: var(--navy-dark); margin-bottom: 4px;">Payment Date From</label>
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control" style="width: 100%;">
+    </div>
+
+    <div>
+      <label style="display: block; font-size: 12px; font-weight: 600; color: var(--navy-dark); margin-bottom: 4px;">Payment Date To</label>
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control" style="width: 100%;">
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button type="submit" class="btn btn-primary" style="padding: 8px 16px;">
+        Filter
+      </button>
+      {% if query or date_from or date_to or selected_month or selected_year != 2026 %}
+        <a href="{% url 'contributions:welfare_overview' %}" class="btn btn-outline" style="padding: 8px 12px;">
+          Reset
+        </a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- Monthly Coverage Grid Matrix -->
+{% if member_coverage_rows %}
+  <div class="card" style="padding: 24px; margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+          {{ selected_year }} Member Coverage Grid
+        </h3>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 2px;">
+          Showing months covered by welfare contributions for active contributing members.
+        </div>
+      </div>
+      <span class="badge badge-default" style="font-weight: 600;">
+        Year: {{ selected_year }}
+      </span>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table" style="margin-bottom: 0; font-size: 13px;">
+        <thead>
+          <tr>
+            <th style="min-width: 180px;">Member</th>
+            <th style="text-align: center; width: 45px;">Jan</th>
+            <th style="text-align: center; width: 45px;">Feb</th>
+            <th style="text-align: center; width: 45px;">Mar</th>
+            <th style="text-align: center; width: 45px;">Apr</th>
+            <th style="text-align: center; width: 45px;">May</th>
+            <th style="text-align: center; width: 45px;">Jun</th>
+            <th style="text-align: center; width: 45px;">Jul</th>
+            <th style="text-align: center; width: 45px;">Aug</th>
+            <th style="text-align: center; width: 45px;">Sep</th>
+            <th style="text-align: center; width: 45px;">Oct</th>
+            <th style="text-align: center; width: 45px;">Nov</th>
+            <th style="text-align: center; width: 45px;">Dec</th>
+            <th style="text-align: center; width: 70px;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in member_coverage_rows %}
+            <tr>
+              <td>
+                <a href="{% url 'members:member_detail' row.member.id %}" style="font-weight: 600; color: var(--navy-dark); text-decoration: none;">
+                  {{ row.member.full_name }}
+                </a>
+                <div style="font-size: 11px; color: var(--text-secondary);">{{ row.member.member_number }}</div>
+              </td>
+              {% for m_idx in "123456789012"|make_list %}
+                {# Helper check for 1-12 #}
+              {% endfor %}
+              <td style="text-align: center;">
+                {% if row.months.1 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.2 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.3 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.4 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.5 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.6 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.7 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.8 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.9 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.10 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.11 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center;">
+                {% if row.months.12 %}
+                  <span style="color: #0b7a42; font-weight: 700;">&#10003;</span>
+                {% else %}
+                  <span style="color: #ccc;">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align: center; font-weight: 700; color: var(--navy-dark);">
+                {{ row.total_covered_months }}/12
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+<!-- Welfare Transactions Table -->
+<div class="card" style="padding: 24px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      Welfare Contribution Records
+    </h3>
+    <span style="font-size: 13px; color: var(--text-secondary);">
+      Showing {{ page_obj.start_index|default:0 }}–{{ page_obj.end_index|default:0 }} of {{ page_obj.paginator.count|default:0 }}
+    </span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table" style="margin-bottom: 0;">
+      <thead>
+        <tr>
+          <th>Receipt Number</th>
+          <th>Member</th>
+          <th>Amount</th>
+          <th>Payment Date</th>
+          <th>Method</th>
+          <th>Coverage Period</th>
+          <th>Recorded By</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in contributions %}
+          <tr>
+            <td>
+              {% if c.receipt %}
+                <a href="{% url 'receipts:receipt_detail' c.receipt.id %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: none;">
+                  {{ c.receipt.receipt_number }}
+                </a>
+              {% else %}
+                <span style="color: var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.member %}
+                <a href="{% url 'members:member_detail' c.member.id %}" style="font-weight: 600; color: var(--navy-dark); text-decoration: none;">
+                  {{ c.member.full_name }}
+                </a>
+                <div style="font-size: 12px; color: var(--text-secondary);">{{ c.member.member_number }}</div>
+              {% elif c.temporary_contributor %}
+                <span style="font-weight: 600; color: var(--navy-dark);">{{ c.temporary_contributor.display_name }}</span>
+                <span class="badge" style="background: #fff3cd; color: #856404; font-size: 10px;">Temporary</span>
+              {% else %}
+                <span style="color: var(--text-secondary);">Anonymous</span>
+              {% endif %}
+            </td>
+            <td style="font-weight: 700; color: var(--navy-dark);">
+              {{ c.currency }} {{ c.amount|floatformat:2 }}
+            </td>
+            <td style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">
+              {{ c.contribution_date }}
+            </td>
+            <td style="font-size: 13px; color: var(--text-secondary);">
+              {{ c.get_payment_mode_display }}
+            </td>
+            <td style="font-size: 13px;">
+              {% if c.welfare_coverages.exists %}
+                <div style="color: var(--color-orange); font-weight: 600; font-size: 12px;">
+                  {% regroup c.welfare_coverages.all by year as cov_by_year %}
+                  {% for grp in cov_by_year %}
+                    {{ grp.grouper }}:
+                    {% if grp.list|length == 12 %}
+                      Whole Year
+                    {% else %}
+                      {% for cov in grp.list %}M{{ cov.month }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    {% endif %}
+                    {% if not forloop.last %} &bull; {% endif %}
+                  {% endfor %}
+                </div>
+              {% else %}
+                <span style="color: var(--text-secondary);">Unspecified</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 12px; color: var(--text-secondary);">
+              {{ c.recorded_by.get_full_name|default:c.recorded_by.email|default:"System" }}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              {% if c.receipt %}
+                <a href="{% url 'receipts:receipt_detail' c.receipt.id %}" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                  Receipt
+                </a>
+                <a href="{% url 'receipts:receipt_pdf' c.receipt.id %}" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                  PDF
+                </a>
+              {% endif %}
+              <a href="{% url 'contributions:contribution_detail' c.id %}" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                Details
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" style="text-align: center; padding: 36px; color: var(--text-secondary);">
+              No welfare contribution records found matching the selected filters.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if page_obj.has_other_pages %}
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+      <div>
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn btn-outline" style="padding: 6px 14px;">
+            &larr; Previous
+          </a>
+        {% endif %}
+      </div>
+      <span style="font-size: 13px; color: var(--text-secondary);">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+      <div>
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_year %}&year={{ selected_year }}{% endif %}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="btn btn-outline" style="padding: 6px 14px;">
+            Next &rarr;
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

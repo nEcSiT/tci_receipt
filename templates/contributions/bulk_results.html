@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Contributions Recorded — TCI Higher Life Center{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+  <div>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">
+      <a href="{% url 'core:dashboard' %}" style="color: var(--text-secondary); text-decoration: none;">Dashboard</a> &rsaquo;
+      <a href="{% url 'contributions:contribution_list' %}" style="color: var(--text-secondary); text-decoration: none;">Contributions</a> &rsaquo;
+      <span>Batch Results</span>
+    </div>
+    <h1 style="font-size: 24px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      Batch Recorded Successfully
+    </h1>
+    <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
+      {{ result.count }} contribution{{ result.count|pluralize }} recorded. Individual official receipts generated and SMS notifications queued.
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px;">
+    <a href="{% url 'contributions:bulk_entry' %}" class="btn btn-outline">
+      Record More (Bulk)
+    </a>
+    <a href="{% url 'contributions:contribution_list' %}" class="btn btn-primary">
+      Contributions List
+    </a>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+  <div class="card" style="padding: 18px; border-left: 4px solid #0b7a42;">
+    <div style="font-size: 12px; color: #0b7a42; text-transform: uppercase; font-weight: 600;">Recorded Contributions</div>
+    <div style="font-size: 28px; font-weight: 700; color: #0b7a42; margin-top: 4px;">{{ result.count }}</div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid var(--color-orange);">
+    <div style="font-size: 12px; color: var(--color-orange); text-transform: uppercase; font-weight: 600;">Total Amount Recorded</div>
+    <div style="font-size: 26px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">GHS {{ result.total_amount|floatformat:2 }}</div>
+  </div>
+  <div class="card" style="padding: 18px; border-left: 4px solid var(--navy-dark);">
+    <div style="font-size: 12px; color: var(--navy-dark); text-transform: uppercase; font-weight: 600;">Receipts Issued</div>
+    <div style="font-size: 28px; font-weight: 700; color: var(--navy-dark); margin-top: 4px;">{{ result.receipts|length }}</div>
+  </div>
+</div>
+
+<!-- Contributions Table -->
+<div class="card" style="padding: 24px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <h3 style="font-size: 16px; font-weight: 700; color: var(--navy-dark); margin: 0;">
+      Generated Receipts & Contributions
+    </h3>
+    <span style="font-size: 13px; color: var(--text-secondary);">
+      Showing {{ result.contributions|length }} record{{ result.contributions|length|pluralize }}
+    </span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table" style="margin-bottom: 0;">
+      <thead>
+        <tr>
+          <th style="width: 40px;">#</th>
+          <th>Receipt Number</th>
+          <th>Member</th>
+          <th>Category</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in result.contributions %}
+          <tr>
+            <td style="font-weight: 600; color: var(--text-secondary);">{{ forloop.counter }}</td>
+            <td>
+              {% if c.receipt %}
+                <a href="{% url 'receipts:receipt_detail' c.receipt.id %}" style="font-weight: 700; color: var(--navy-dark); text-decoration: none;">
+                  {{ c.receipt.receipt_number }}
+                </a>
+              {% else %}
+                <span style="color: var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="font-weight: 600; color: var(--navy-dark);">
+                {{ c.member.full_name }}
+              </div>
+              {% if c.member.member_number %}
+                <div style="font-size: 12px; color: var(--text-secondary);">{{ c.member.member_number }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-default" style="font-weight: 600;">
+                {{ c.contribution_type.name }}
+              </span>
+              {% if c.custom_type_description %}
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                  {{ c.custom_type_description }}
+                </div>
+              {% endif %}
+              {% if c.welfare_coverages.exists %}
+                <div style="font-size: 12px; color: var(--color-orange); margin-top: 2px; font-weight: 600;">
+                  Welfare:
+                  {% for cov in c.welfare_coverages.all %}
+                    {{ cov.year }}-M{{ cov.month }}{% if not forloop.last %}, {% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+            <td style="font-weight: 700; color: var(--navy-dark);">
+              {{ c.currency }} {{ c.amount|floatformat:2 }}
+            </td>
+            <td style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">
+              {{ c.contribution_date }}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              {% if c.receipt %}
+                <a href="{% url 'receipts:receipt_detail' c.receipt.id %}" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                  View Receipt
+                </a>
+                <a href="{% url 'receipts:receipt_pdf' c.receipt.id %}" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                  PDF
+                </a>
+              {% endif %}
+              <a href="{% url 'contributions:contribution_detail' c.id %}" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">
+                Details
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

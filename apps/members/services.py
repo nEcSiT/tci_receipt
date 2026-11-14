@@ -1,7 +1,7 @@
 import logging
 import uuid
 from django.db import transaction
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -927,3 +927,318 @@ class MemberMergeService:
             )
 
         return merge_request
+
+
+class MemberImportService:
+    """
+    Service managing bulk Excel member importation.
+    Provides downloadable templates, row-by-row conflict detection, phone normalization,
+    and atomic member creation via existing MemberService invariants.
+    """
+
+    @classmethod
+    def generate_template(cls) -> bytes:
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = openpyxl.Workbook()
+
+        # Sheet 1: Data Sheet
+        ws = wb.active
+        ws.title = "Members"
+
+        headers = [
+            "First Name *",
+            "Middle Name",
+            "Last Name *",
+            "Phone Number *",
+            "Email",
+            "Ministry",
+            "Team",
+            "Department",
+        ]
+        ws.append(headers)
+
+        # Style Header
+        navy_fill = PatternFill(start_color="011345", end_color="011345", fill_type="solid")
+        header_font = Font(name="Cabin", size=11, bold=True, color="FFFFFF")
+        thin_border = Border(
+            left=Side(style="thin", color="CCCCCC"),
+            right=Side(style="thin", color="CCCCCC"),
+            top=Side(style="thin", color="CCCCCC"),
+            bottom=Side(style="thin", color="CCCCCC"),
+        )
+
+        for col_num in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.fill = navy_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+
+        # Example rows
+        examples = [
+            ["Kwame", "", "Mensah", "0241234567", "kwame.mensah@example.com", "Choir", "Youth", "Worship"],
+            ["Ama", "Akua", "Osei", "+233209876543", "ama.osei@example.com", "Ushering", "Protocol", "Evangelism"],
+        ]
+        for r_idx, row_data in enumerate(examples, start=2):
+            for c_idx, val in enumerate(row_data, start=1):
+                cell = ws.cell(row=r_idx, column=c_idx)
+                cell.value = str(val)
+                cell.number_format = "@"  # Text format to preserve leading zeroes!
+                cell.font = Font(name="Cabin", size=10)
+                cell.border = thin_border
+
+        # Set column widths
+        col_widths = [18, 16, 18, 20, 28, 16, 16, 16]
+        for col_idx, width in enumerate(col_widths, start=1):
+            col_letter = openpyxl.utils.get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = width
+
+        # Sheet 2: Instructions Sheet
+        ws_info = wb.create_sheet(title="Instructions")
+        ws_info.append(["TCI Higher Life Center — Member Excel Import Instructions"])
+        ws_info.append([])
+        ws_info.append(["Field Name", "Requirement", "Accepted Format", "Notes"])
+
+        field_info = [
+            ["First Name", "Required", "Plain text (e.g. Kwame)", "Primary given name"],
+            ["Middle Name", "Optional", "Plain text (e.g. Akua)", "Secondary name if applicable"],
+            ["Last Name", "Required", "Plain text (e.g. Mensah)", "Family or surname"],
+            ["Phone Number", "Required", "Text format: 024XXXXXXX or +23324XXXXXXX", "Must be formatted as Text in Excel to preserve leading 0. Unique per active member."],
+            ["Email", "Optional", "Valid email (e.g. name@example.com)", "Contact email"],
+            ["Ministry", "Optional", "Plain text (e.g. Choir, Ushering)", "Church ministry"],
+            ["Team", "Optional", "Plain text (e.g. Youth, Men of Valour)", "Fellowship team"],
+            ["Department", "Optional", "Plain text (e.g. Protocol, Media)", "Operational department"],
+        ]
+        for row in field_info:
+            ws_info.append(row)
+
+        ws_info.append([])
+        ws_info.append(["Important Guidelines:"])
+        ws_info.append(["1. Phone numbers must be unique across all church members."])
+        ws_info.append(["2. Re-uploading existing members will be flagged and not duplicated."])
+        ws_info.append(["3. Spreadsheet formulas are disabled for security."])
+
+        # Style instructions
+        ws_info["A1"].font = Font(name="Cabin", size=14, bold=True, color="011345")
+        for col_idx in range(1, 5):
+            c = ws_info.cell(row=3, column=col_idx)
+            c.fill = PatternFill(start_color="F16822", end_color="F16822", fill_type="solid")
+            c.font = Font(name="Cabin", size=11, bold=True, color="FFFFFF")
+
+        ws_info.column_dimensions["A"].width = 20
+        ws_info.column_dimensions["B"].width = 16
+        ws_info.column_dimensions["C"].width = 40
+        ws_info.column_dimensions["D"].width = 50
+
+        stream = io.BytesIO()
+        wb.save(stream)
+        return stream.getvalue()
+
+    @classmethod
+    def parse_and_validate_file(cls, file_obj, actor: User) -> dict:
+        import openpyxl
+        from apps.core.utils.phone import validate_phone_number
+
+        if not actor.is_system_administrator and not actor.has_permission("member.create"):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        try:
+            wb = openpyxl.load_workbook(file_obj, data_only=True)
+        except Exception as e:
+            raise ValidationError(f"Unable to read Excel file: {str(e)}")
+
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            raw_headers = next(rows_iter)
+        except StopIteration:
+            raise ValidationError("The uploaded Excel file is empty.")
+
+        if not raw_headers:
+            raise ValidationError("The uploaded Excel file does not contain a header row.")
+
+        # Map header positions
+        col_map = {}
+        for idx, h in enumerate(raw_headers):
+            if h is None:
+                continue
+            h_clean = str(h).strip().lower().replace("*", "").strip()
+            if "first" in h_clean:
+                col_map["first_name"] = idx
+            elif "middle" in h_clean:
+                col_map["middle_name"] = idx
+            elif "last" in h_clean:
+                col_map["last_name"] = idx
+            elif "phone" in h_clean:
+                col_map["phone_number"] = idx
+            elif "email" in h_clean:
+                col_map["email"] = idx
+            elif "ministry" in h_clean:
+                col_map["ministry"] = idx
+            elif "team" in h_clean:
+                col_map["team"] = idx
+            elif "dept" in h_clean or "department" in h_clean:
+                col_map["department"] = idx
+
+        if "first_name" not in col_map or "last_name" not in col_map:
+            raise ValidationError(
+                "Missing required columns in Excel header. 'First Name' and 'Last Name' are required."
+            )
+
+        seen_phones_in_file: dict[str, int] = {}
+        parsed_rows = []
+        valid_count = 0
+        conflict_count = 0
+        error_count = 0
+
+        for row_num, row_values in enumerate(rows_iter, start=2):
+            if not row_values or all(v is None or str(v).strip() == "" for v in row_values):
+                continue  # skip completely blank rows
+
+            def get_val(key):
+                idx = col_map.get(key)
+                if idx is not None and idx < len(row_values):
+                    val = row_values[idx]
+                    if val is not None:
+                        s = str(val).strip()
+                        # Reject or sanitize formula injections
+                        if s.startswith("="):
+                            s = s[1:].strip()
+                        return s
+                return ""
+
+            first_name = get_val("first_name")
+            middle_name = get_val("middle_name")
+            last_name = get_val("last_name")
+            phone_raw = get_val("phone_number")
+            email = get_val("email")
+            ministry = get_val("ministry")
+            team = get_val("team")
+            department = get_val("department")
+
+            row_errors = []
+            status = "READY"
+            matched_member_info = None
+
+            # 1. Name validation
+            if not first_name or not last_name:
+                row_errors.append("First name and last name are required.")
+                status = "ERROR"
+
+            # 2. Phone validation
+            clean_phone = clean_phone_number(phone_raw) if phone_raw else ""
+            if phone_raw and not clean_phone:
+                row_errors.append("Invalid phone number format.")
+                status = "ERROR"
+            elif clean_phone:
+                if not validate_phone_number(clean_phone):
+                    row_errors.append(f"Phone number '{phone_raw}' is not a valid phone number (expected 9-15 digits).")
+                    status = "ERROR"
+                else:
+                    # In-file duplicate check
+                    if clean_phone in seen_phones_in_file:
+                        prev_row = seen_phones_in_file[clean_phone]
+                        row_errors.append(f"Duplicate phone number in file (already in row {prev_row}).")
+                        status = "CONFLICT"
+                    else:
+                        seen_phones_in_file[clean_phone] = row_num
+
+                    # Database conflict check
+                    variants = get_phone_lookup_variants(clean_phone)
+                    existing_phone = MemberPhoneNumber.objects.filter(
+                        phone_number__in=variants,
+                        is_active=True,
+                    ).select_related("member").first()
+
+                    if existing_phone:
+                        m = existing_phone.member
+                        matched_member_info = f"{m.full_name} ({m.member_number})"
+                        row_errors.append(f"This phone number is already registered to another member ({matched_member_info}).")
+                        status = "CONFLICT"
+
+            if status == "READY":
+                valid_count += 1
+            elif status == "CONFLICT":
+                conflict_count += 1
+            else:
+                error_count += 1
+
+            parsed_rows.append({
+                "row_number": row_num,
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "phone_number": clean_phone or phone_raw,
+                "email": email,
+                "ministry": ministry,
+                "team": team,
+                "department": department,
+                "status": status,
+                "errors": row_errors,
+                "matched_member": matched_member_info,
+            })
+
+        return {
+            "total_rows": len(parsed_rows),
+            "valid_count": valid_count,
+            "conflict_count": conflict_count,
+            "error_count": error_count,
+            "rows": parsed_rows,
+        }
+
+    @classmethod
+    @transaction.atomic
+    def execute_import(cls, actor: User, valid_rows: list[dict]) -> dict:
+        if not actor.is_system_administrator and not actor.has_permission("member.create"):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        created_members = []
+        skipped_count = 0
+
+        for r in valid_rows:
+            phone = r.get("phone_number", "").strip()
+            # Double check concurrency phone conflict under lock
+            if phone:
+                variants = get_phone_lookup_variants(phone)
+                conflict = MemberPhoneNumber.objects.filter(
+                    phone_number__in=variants,
+                    is_active=True,
+                ).exists()
+                if conflict:
+                    skipped_count += 1
+                    continue
+
+            new_m = MemberService.create_member(
+                creator=actor,
+                first_name=r.get("first_name", ""),
+                last_name=r.get("last_name", ""),
+                middle_name=r.get("middle_name", ""),
+                email=r.get("email", ""),
+                ministry=r.get("ministry", ""),
+                team=r.get("team", ""),
+                department=r.get("department", ""),
+                phone_number=phone or None,
+            )
+            created_members.append(new_m)
+
+        AuditService.log(
+            action="MEMBERS_EXCEL_IMPORTED",
+            entity_type="Member",
+            entity_id=actor.id,
+            user=actor,
+            new_values={
+                "imported_count": len(created_members),
+                "skipped_conflicts": skipped_count,
+                "created_member_numbers": [m.member_number for m in created_members[:50]],
+            },
+            result=AuditResult.SUCCESS,
+        )
+
+        return {
+            "imported_count": len(created_members),
+            "skipped_count": skipped_count,
+            "created_members": created_members,
+        }

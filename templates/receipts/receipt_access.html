@@ -129,6 +129,11 @@
             {% if receipt.contribution.custom_type_description %}
               &bull; <em>{{ receipt.contribution.custom_type_description }}</em>
             {% endif %}
+            {% if receipt.contribution.welfare_coverage_display %}
+              <div style="margin-top: 4px; font-weight: 600; color: #011345;">
+                Covered Period: {{ receipt.contribution.welfare_coverage_display }}
+              </div>
+            {% endif %}
           </div>
         </div>
 
