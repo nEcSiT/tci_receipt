@@ -21,10 +21,18 @@ from apps.contributions.models import (
     EntryMethod,
     ContributionStatus,
     PaymentTransactionStatus,
+    WelfareCoverage,
+    ContributionBatch,
+    ContributionBatchStatus,
 )
 from apps.contributions.providers.base import PaymentResult, PaymentStatus
 from apps.contributions.providers.factory import get_payment_provider
-from apps.core.utils.phone import extract_first_name_from_provider_name
+from apps.core.utils.phone import (
+    clean_phone_number,
+    validate_phone_number,
+    get_phone_lookup_variants,
+    extract_first_name_from_provider_name,
+)
 from apps.members.models import Member, TemporaryContributor, MemberStatus
 from apps.members.services import ContributorIdentificationService
 from apps.notifications.models import (
@@ -45,6 +53,121 @@ from apps.receipts.models import Receipt
 from apps.receipts.services import ReceiptRetryService, ReceiptService
 
 logger = logging.getLogger(__name__)
+
+
+class WelfareCoverageService:
+    """
+    Business service enforcing flexible Welfare coverage rules according to PRD Section 31.3.
+    Requires an explicit coverage year and at least one valid month.
+    Accepts documented month names, numbers (1-12), and 'Whole Year' (converted to 1-12).
+    Strictly rejects invalid or mixed invalid tokens without silent fallback.
+    """
+
+    MONTH_NAME_MAP = {
+        "jan": 1, "january": 1,
+        "feb": 2, "february": 2,
+        "mar": 3, "march": 3,
+        "apr": 4, "april": 4,
+        "may": 5,
+        "jun": 6, "june": 6,
+        "jul": 7, "july": 7,
+        "aug": 8, "august": 8,
+        "sep": 9, "sept": 9, "september": 9,
+        "oct": 10, "october": 10,
+        "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+
+    WHOLE_YEAR_KEYWORDS = {"whole year", "all", "year", "1-12", "1 - 12", "all months"}
+
+    @classmethod
+    def parse_and_validate_coverage(cls, year_val, months_val) -> tuple[int, list[int]]:
+        """
+        Validates explicit welfare coverage year and months.
+        - Requires an explicit coverage year (between 2000 and 2100).
+        - Requires at least one valid month.
+        - Accepts documented month names, month numbers (1-12), and Whole Year.
+        - Strictly rejects invalid or unsupported values with clear client-friendly errors.
+        - Does NOT silently discard invalid parts of a mixed selection (e.g. 'Jan, 13').
+        - Does NOT replace missing or invalid coverage with the payment date.
+        - Converts Whole Year into months 1-12 for the selected year.
+        - Accepts future years and valid months.
+        """
+        # 1. Year validation
+        if year_val is None or str(year_val).strip() == "":
+            raise ValidationError("Coverage year is required for Welfare contributions.")
+        try:
+            parsed_year = int(str(year_val).strip())
+            if parsed_year < 2000 or parsed_year > 2100:
+                raise ValidationError("Welfare coverage year must be between 2000 and 2100.")
+        except (ValueError, TypeError):
+            raise ValidationError("Coverage year is required for Welfare contributions.")
+
+        # 2. Months validation
+        parsed_months = cls.parse_welfare_months(months_val, strict=True)
+        return parsed_year, parsed_months
+
+    @classmethod
+    def parse_welfare_months(cls, val, strict: bool = True) -> list[int]:
+        """
+        Parses and validates month values.
+        Accepts month names, numbers (1-12), comma-separated strings, lists, or 'Whole Year'.
+        If strict is True, rejects missing or invalid inputs with clear ValidationError.
+        """
+        if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, (list, tuple)) and len(val) == 0):
+            if strict:
+                raise ValidationError("Select the welfare months this payment covers.")
+            return []
+
+        if isinstance(val, (list, tuple)):
+            tokens = list(val)
+        elif isinstance(val, str):
+            s = val.strip()
+            if s.lower() in cls.WHOLE_YEAR_KEYWORDS:
+                return list(range(1, 13))
+            tokens = [t.strip() for t in re.split(r"[,;/]+", s) if t.strip()]
+        else:
+            tokens = [str(val).strip()]
+
+        if not tokens:
+            if strict:
+                raise ValidationError("Select the welfare months this payment covers.")
+            return []
+
+        res = []
+        for raw_tok in tokens:
+            t = str(raw_tok).strip()
+            if not t:
+                continue
+            t_lower = t.lower()
+            if t_lower in cls.WHOLE_YEAR_KEYWORDS:
+                for m in range(1, 13):
+                    if m not in res:
+                        res.append(m)
+                continue
+
+            if t_lower in cls.MONTH_NAME_MAP:
+                m_num = cls.MONTH_NAME_MAP[t_lower]
+                if m_num not in res:
+                    res.append(m_num)
+            else:
+                try:
+                    m_num = int(t)
+                    if 1 <= m_num <= 12:
+                        if m_num not in res:
+                            res.append(m_num)
+                    else:
+                        raise ValidationError(
+                            f"Invalid welfare month '{t}'. Select the welfare months this payment covers (e.g. 'Jan, Feb, Mar', '1, 2, 3', or 'Whole Year')."
+                        )
+                except ValueError:
+                    raise ValidationError(
+                        f"Invalid welfare month '{t}'. Select the welfare months this payment covers (e.g. 'Jan, Feb, Mar', '1, 2, 3', or 'Whole Year')."
+                    )
+
+        if not res and strict:
+            raise ValidationError("Select the welfare months this payment covers.")
+        return sorted(res)
 
 
 class ContributionService:
@@ -114,25 +237,13 @@ class ContributionService:
             # PRD requirement: Do not retain an irrelevant description when user changes to another category
             clean_description = None
 
-        # Validate welfare coverage if provided
+        # Validate welfare coverage: Welfare strictly requires coverage year and at least one valid month
         parsed_coverage_year = None
         parsed_coverage_months = []
-        if is_welfare and coverage_year:
-            try:
-                parsed_coverage_year = int(str(coverage_year).strip())
-                if parsed_coverage_year < 2000 or parsed_coverage_year > 2100:
-                    raise ValidationError("Welfare coverage year must be between 2000 and 2100.")
-            except (ValueError, TypeError):
-                raise ValidationError("Invalid welfare coverage year.")
-
-            if coverage_months:
-                for m in coverage_months:
-                    try:
-                        m_int = int(str(m).strip())
-                        if 1 <= m_int <= 12 and m_int not in parsed_coverage_months:
-                            parsed_coverage_months.append(m_int)
-                    except (ValueError, TypeError):
-                        pass
+        if is_welfare:
+            parsed_coverage_year, parsed_coverage_months = WelfareCoverageService.parse_and_validate_coverage(
+                coverage_year, coverage_months
+            )
 
         # 5. Payment Mode validation
         if payment_mode not in PaymentMode.values:
@@ -1111,51 +1222,7 @@ class BulkContributionService:
         """Parses flexible month representations (names, numbers, ranges, or 'Whole Year')."""
         if not val:
             return []
-        if isinstance(val, (list, tuple)):
-            res = []
-            for v in val:
-                try:
-                    i = int(v)
-                    if 1 <= i <= 12 and i not in res:
-                        res.append(i)
-                except (ValueError, TypeError):
-                    pass
-            return sorted(res)
-
-        s = str(val).strip().lower()
-        if s in ["all", "whole year", "year", "1-12", "1 - 12", "all months"]:
-            return list(range(1, 13))
-
-        month_map = {
-            "jan": 1, "january": 1,
-            "feb": 2, "february": 2,
-            "mar": 3, "march": 3,
-            "apr": 4, "april": 4,
-            "may": 5,
-            "jun": 6, "june": 6,
-            "jul": 7, "july": 7,
-            "aug": 8, "august": 8,
-            "sep": 9, "sept": 9, "september": 9,
-            "oct": 10, "october": 10,
-            "nov": 11, "november": 11,
-            "dec": 12, "december": 12,
-        }
-
-        tokens = [t.strip() for t in re.split(r"[,;/]+", s) if t.strip()]
-        res = []
-        for t in tokens:
-            if t in month_map:
-                m = month_map[t]
-                if m not in res:
-                    res.append(m)
-            else:
-                try:
-                    i = int(t)
-                    if 1 <= i <= 12 and i not in res:
-                        res.append(i)
-                except ValueError:
-                    pass
-        return sorted(res)
+        return WelfareCoverageService.parse_welfare_months(val, strict=True)
 
     @classmethod
     def generate_template(cls) -> bytes:
@@ -1427,28 +1494,19 @@ class BulkContributionService:
             welfare_months = []
             if c_type and c_type.name.strip().lower() == "welfare":
                 yr_val = r.get("coverage_year", r.get("welfare_coverage_year", ""))
-                if yr_val:
-                    try:
-                        welfare_year = int(str(yr_val).strip())
-                        if welfare_year < 2000 or welfare_year > 2100:
-                            row_errors.append("Welfare coverage year must be between 2000 and 2100.")
-                            status = "ERROR"
-                    except (ValueError, TypeError):
-                        row_errors.append(f"Invalid coverage year '{yr_val}'.")
-                        status = "ERROR"
-                else:
-                    welfare_year = parsed_date.year
-
                 months_val = r.get("coverage_months", r.get("welfare_coverage_months", ""))
-                welfare_months = cls.parse_welfare_months(months_val)
-                if not welfare_months:
-                    # Default to payment date month if omitted
-                    welfare_months = [parsed_date.month]
 
-                if welfare_year and welfare_months:
+                try:
+                    welfare_year, welfare_months = WelfareCoverageService.parse_and_validate_coverage(
+                        yr_val, months_val
+                    )
                     m_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
                     period_str = f"Whole Year {welfare_year}" if len(welfare_months) == 12 else f"{', '.join(m_names[m] for m in welfare_months)} {welfare_year}"
                     welfare_periods_list.append(period_str)
+                except ValidationError as e:
+                    error_msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+                    row_errors.append(error_msg)
+                    status = "ERROR"
 
             row_summary = {
                 "row_index": idx,
@@ -1580,41 +1638,115 @@ class BulkContributionService:
         return cls.parse_and_validate_rows(extracted_rows, actor=actor)
 
     @classmethod
+    def create_batch_record(cls, actor: User, preview_data: dict) -> ContributionBatch:
+        """
+        Creates a persistent ContributionBatch record binding the actor to the validated preview.
+        Enforces a database-level unique submission token for concurrency protection.
+        """
+        if not actor.is_system_administrator and not actor.has_permission("contribution.create"):
+            raise PermissionDenied("You do not have permission to record contributions.")
+
+        token = uuid.uuid4().hex
+        valid_rows = preview_data.get("valid_rows", [])
+        total_amt = preview_data.get("valid_total_amount", Decimal("0.00"))
+
+        batch = ContributionBatch.objects.create(
+            submission_token=token,
+            created_by=actor,
+            status=ContributionBatchStatus.PENDING,
+            total_amount=total_amt,
+            row_count=len(valid_rows),
+            preview_data=valid_rows,
+        )
+        return batch
+
+    @classmethod
     @transaction.atomic
-    def execute_batch(cls, actor: User, valid_rows: list[dict], idempotency_token: str) -> dict:
+    def execute_batch(
+        cls,
+        actor: User,
+        valid_rows: list[dict] | None = None,
+        idempotency_token: str | None = None,
+        submission_token: str | None = None,
+    ) -> dict:
         """
         Executes a validated bulk contribution batch inside an atomic transaction.
-        Creates individual contributions, generates individual official receipts,
-        triggers category-specific thank-you SMS, and records audit logs.
-        Idempotent: prevents duplicate submission from refreshes, retries, or double clicks.
+        Enforces database-level locking and persistent batch tracking using ContributionBatch.
+        Binds batch to initiating user and validated preview.
+        Prevents duplicate execution from refreshes, retries, or double clicks.
         """
         from apps.receipts.services import ReceiptService
         from apps.members.services import MemberService
-        from apps.contributions.models import Contribution, ContributionType, WelfareCoverage
-        from apps.members.models import Member
+        from apps.contributions.models import (
+            Contribution,
+            ContributionType,
+            WelfareCoverage,
+            ContributionBatch,
+            ContributionBatchStatus,
+        )
+        from apps.members.models import Member, MemberStatus
         from apps.audit.models import AuditLog
 
         if not actor.is_system_administrator and not actor.has_permission("contribution.create"):
             raise PermissionDenied("You do not have permission to record contributions.")
 
-        # Concurrency & Idempotency check
-        existing_log = AuditLog.objects.filter(
-            action="BULK_CONTRIBUTIONS_RECORDED",
-            new_values__idempotency_token=idempotency_token,
-        ).first()
+        token = submission_token or idempotency_token
+        if not token or not str(token).strip():
+            raise ValidationError("Submission token is required. Please submit your batch from the preview page.")
+        token = str(token).strip()
 
-        if existing_log and existing_log.new_values.get("contribution_ids"):
-            existing_ids = existing_log.new_values["contribution_ids"]
-            contributions = list(Contribution.objects.filter(id__in=existing_ids))
-            receipts = [c.receipt for c in contributions if hasattr(c, "receipt")]
-            total_amt = sum((c.amount for c in contributions), Decimal("0.00"))
+        # Database-enforced atomic row lock on ContributionBatch
+        batch = ContributionBatch.objects.select_for_update().filter(submission_token=token).first()
+
+        # Support direct programmatic calls or legacy tests providing valid_rows
+        if not batch:
+            if valid_rows is not None:
+                total_amt = sum((Decimal(str(r["amount"])) for r in valid_rows), Decimal("0.00"))
+                batch = ContributionBatch.objects.create(
+                    submission_token=token,
+                    created_by=actor,
+                    status=ContributionBatchStatus.PENDING,
+                    total_amount=total_amt,
+                    row_count=len(valid_rows),
+                    preview_data=valid_rows,
+                )
+                # Re-fetch under row lock
+                batch = ContributionBatch.objects.select_for_update().filter(id=batch.id).first()
+            else:
+                raise ValidationError("Invalid, altered, or expired submission token.")
+
+        # Verify batch ownership
+        if batch.created_by != actor and not actor.is_system_administrator:
+            raise PermissionDenied("You do not have permission to confirm or process this batch.")
+
+        # Replay handling: if batch is already completed, return original results without recreation
+        if batch.status == ContributionBatchStatus.COMPLETED:
+            existing_ids = batch.result_summary.get("contribution_ids", [])
+            contributions = list(Contribution.objects.filter(id__in=existing_ids).select_related("member", "contribution_type", "receipt"))
+            receipts = [c.receipt for c in contributions if hasattr(c, "receipt") and c.receipt]
             return {
+                "batch": batch,
                 "contributions": contributions,
                 "receipts": receipts,
                 "count": len(contributions),
-                "total_amount": total_amt,
+                "total_amount": batch.total_amount,
                 "is_replay": True,
             }
+
+        # Concurrency check: if batch is actively processing, reject simultaneous request
+        if batch.status == ContributionBatchStatus.PROCESSING:
+            raise ValidationError("This batch is currently being processed by another request. Please wait.")
+
+        # Claim the batch atomically
+        batch.status = ContributionBatchStatus.PROCESSING
+        batch.save(update_fields=["status"])
+
+        rows_to_process = batch.preview_data or valid_rows or []
+        if not rows_to_process:
+            batch.status = ContributionBatchStatus.FAILED
+            batch.error_message = "No valid rows found in batch preview."
+            batch.save(update_fields=["status", "error_message"])
+            raise ValidationError("No valid contribution rows to record.")
 
         created_contributions = []
         created_receipts = []
@@ -1623,17 +1755,28 @@ class BulkContributionService:
         # Map active types by id
         types_by_id = {str(t.id): t for t in ContributionType.objects.filter(is_active=True)}
 
-        for r in valid_rows:
+        for idx, r in enumerate(rows_to_process, start=1):
             member = None
             member_id = r.get("member_id")
             if member_id:
                 member = Member.objects.filter(id=member_id).first()
+                if not member:
+                    raise ValidationError(f"Row {idx}: Member not found or has been deleted.")
+                if member.status != MemberStatus.ACTIVE:
+                    raise ValidationError(f"Row {idx}: Member {member.full_name} is not active ({member.status}).")
 
             # Handle proposed new member creation
             proposed = r.get("proposed_new_member")
             if not member and proposed:
                 if not (actor.is_system_administrator or actor.has_permission("member.create")):
                     raise PermissionDenied("You do not have permission to register new church members.")
+                phone_prop = proposed.get("phone_number")
+                if phone_prop:
+                    from apps.core.utils.phone import get_phone_lookup_variants
+                    from apps.members.models import MemberPhoneNumber
+                    variants = get_phone_lookup_variants(phone_prop)
+                    if MemberPhoneNumber.objects.filter(phone_number__in=variants, is_active=True).exists():
+                        raise ValidationError(f"Row {idx}: Proposed member phone {phone_prop} is already registered.")
                 member = MemberService.create_member(
                     creator=actor,
                     first_name=proposed["first_name"],
@@ -1642,13 +1785,19 @@ class BulkContributionService:
                 )
 
             if not member:
-                continue
+                raise ValidationError(f"Row {idx}: A valid church member is required for each contribution.")
 
-            c_type = types_by_id.get(r.get("category_id"))
+            cat_id = str(r.get("category_id"))
+            c_type = types_by_id.get(cat_id)
             if not c_type:
-                continue
+                c_type = ContributionType.objects.filter(id=cat_id, is_active=True).first()
+            if not c_type:
+                raise ValidationError(f"Row {idx}: Contribution category is inactive or does not exist.")
 
             amount = Decimal(str(r["amount"])).quantize(Decimal("0.01"))
+            if amount <= Decimal("0.00"):
+                raise ValidationError(f"Row {idx}: Contribution amount must be greater than zero.")
+
             currency = r.get("currency", "GHS")
             mode = r.get("payment_mode", "CASH")
             ref_num = r.get("reference_number") or None
@@ -1665,7 +1814,19 @@ class BulkContributionService:
             is_other = c_type.name.strip().lower() == "other"
             is_welfare = c_type.name.strip().lower() == "welfare"
 
-            clean_desc = desc if is_other else None
+            clean_desc = None
+            if is_other:
+                if not desc or not str(desc).strip():
+                    raise ValidationError(f"Row {idx}: Description is mandatory for 'Other' contribution category.")
+                clean_desc = str(desc).strip()
+
+            cov_year = None
+            cov_months = []
+            if is_welfare:
+                cov_year, cov_months = WelfareCoverageService.parse_and_validate_coverage(
+                    r.get("coverage_year"),
+                    r.get("coverage_months"),
+                )
 
             # Create individual contribution
             contrib = Contribution.objects.create(
@@ -1685,16 +1846,15 @@ class BulkContributionService:
             )
 
             # Record Welfare Coverages
-            if is_welfare and r.get("coverage_year") and r.get("coverage_months"):
-                yr = int(r["coverage_year"])
-                for m in r["coverage_months"]:
+            if is_welfare and cov_year and cov_months:
+                for m in cov_months:
                     WelfareCoverage.objects.create(
                         contribution=contrib,
-                        year=yr,
-                        month=int(m),
+                        year=cov_year,
+                        month=m,
                     )
 
-            # Generate individual receipt (triggers personalized thank-you SMS upon commit)
+            # Generate individual receipt (triggers personalized thank-you SMS strictly upon transaction commit)
             receipt = ReceiptService.generate_receipt(
                 contrib,
                 generated_by_user=actor,
@@ -1705,13 +1865,27 @@ class BulkContributionService:
             created_receipts.append(receipt)
             total_amount += amount
 
+        # Update batch record to COMPLETED
+        batch.status = ContributionBatchStatus.COMPLETED
+        batch.completed_at = timezone.now()
+        batch.total_amount = total_amount
+        batch.row_count = len(created_contributions)
+        batch.result_summary = {
+            "contribution_ids": [str(c.id) for c in created_contributions],
+            "receipt_ids": [str(rc.id) for rc in created_receipts],
+            "receipt_numbers": [rc.receipt_number for rc in created_receipts],
+            "count": len(created_contributions),
+            "total_amount": str(total_amount),
+        }
+        batch.save(update_fields=["status", "completed_at", "total_amount", "row_count", "result_summary"])
+
         AuditService.log(
             action="BULK_CONTRIBUTIONS_RECORDED",
-            entity_type="Contribution",
-            entity_id=actor.id,
+            entity_type="ContributionBatch",
+            entity_id=batch.id,
             user=actor,
             new_values={
-                "idempotency_token": idempotency_token,
+                "submission_token": token,
                 "recorded_count": len(created_contributions),
                 "total_amount": str(total_amount),
                 "contribution_ids": [str(c.id) for c in created_contributions],
@@ -1721,6 +1895,7 @@ class BulkContributionService:
         )
 
         return {
+            "batch": batch,
             "contributions": created_contributions,
             "receipts": created_receipts,
             "count": len(created_contributions),

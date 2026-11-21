@@ -1802,35 +1802,51 @@ wording rather than technical errors. These are approved requirements, not compl
 features. Keep the PRD updated in each implementation PR and distinguish approved,
 implemented and pending work. All development PRs target feature-branch.
 
-## 31.8 Implemented functionality status
+## 31.8 Implemented and verified behavior
 
-As implemented on branch `feat/bulk-contributions-member-import-welfare`:
+As implemented and verified on branch `feat/bulk-contributions-member-import-welfare`:
 
-1. **Category Ordering & Other Description**:
+1. **Category Ordering & Other Description (Approved & Implemented)**:
    - `ContributionType.get_recording_categories()` ensures "Other" is strictly last in recording selectors, preserving other category orders and IDs.
-   - When "Other" is chosen, "What is this contribution for?" (`custom_type_description`) is strictly validated as mandatory on model, forms, and Excel imports. Blank/whitespace-only input is rejected.
+   - When "Other" is chosen, "What is this contribution for?" (`custom_type_description`) is strictly validated as mandatory across models, forms, bulk on-screen entry, and Excel imports. Blank/whitespace-only input is rejected.
    - Changing categories away from "Other" clears the custom description.
 
-2. **Member Excel Import Workflow**:
+2. **Database-Enforced Duplicate Protection for Bulk Contributions (Approved & Implemented)**:
+   - Persistent batch record `ContributionBatch` with database-enforced unique `submission_token`.
+   - Binds the batch preview snapshot to the initiating authorized user.
+   - Atomic database locking (`select_for_update`) claims the batch as `PROCESSING` before creating financial records, ensuring concurrent requests cannot create duplicate contributions or receipts.
+   - Confirmation tokens are strictly verified against stored batch records; missing, altered, or unrelated tokens are rejected without generating replacement tokens.
+   - Idempotent replay: repeated confirmations or browser refreshes detect `COMPLETED` batches and return the original batch result and receipts without duplicate processing or duplicate SMS.
+   - Revalidates member and category state at execution time; never silently skips invalid rows (raises descriptive validation errors).
+   - Atomic financial writes with strict after-commit SMS dispatch (`transaction.on_commit`).
+
+3. **Strict Welfare Coverage Validation (Approved & Implemented)**:
+   - `WelfareCoverageService` strictly requires an explicit coverage year (2000–2100) and at least one valid month for all Welfare contributions across single entry, bulk entry, and Excel imports.
+   - Accepts documented month names ("Jan, Feb, Mar"), month numbers (1–12), and "Whole Year" (converted to 1–12).
+   - Strictly rejects invalid or unsupported values (e.g. 13, "Jan, 13", missing months, missing year) with client-friendly validation errors.
+   - Never silently discards invalid tokens or substitutes the payment date for missing/invalid coverage.
+   - Distinguishes payment receipt date from coverage period; accepts future coverage years with valid months.
+
+4. **Member Database Import & Phoneless Row Protection (Approved & Implemented)**:
    - `MemberImportService` generates a styled `.xlsx` template with documented headers, example rows, and phone text preservation instructions (`@` format to keep leading zeroes).
-   - Validation detects within-file duplicates, phone conflicts against existing members, and invalid rows before saving.
-   - Confirmation creates members through `MemberService` without generating extraneous contributions, receipts, or transactional SMS.
+   - Persistent `MemberImportBatch` record tracks import tokens, SHA-256 file hashes, and row outcomes.
+   - Re-uploading an identical file detects the previous completed import and warns staff to prevent duplicate members.
+   - Rows without phone numbers are flagged as `REVIEW_REQUIRED` with clear explanations (and check for potential existing name matches) rather than silently auto-merging or creating unreviewed members.
+   - Staff can review and explicitly approve phone-less rows via confirmation checkbox.
+   - Member imports create genuine new members through `MemberService` with strictly zero contributions, zero receipts, and zero SMS notifications.
+   - Atomic concurrency protection prevents concurrent import confirmations.
 
-3. **Dual Bulk Contribution Recording**:
-   - On-screen dynamic table (`/contributions/bulk/`) and Excel upload (`/contributions/bulk/upload/`).
-   - Shared validation engine (`BulkContributionService.parse_and_validate_rows`).
-   - Review and preview screen (`bulk_preview.html`) displays row-by-row status, matched members, proposed new members, and validation errors.
-   - Atomic database commit with idempotency protection preventing duplicate creation on replay/refresh.
-   - Issues individual official receipts (`HLC-XXXXXXX`) and category-tailored SMS upon successful commit.
+5. **Welfare Search & Filter Separation (Approved & Implemented)**:
+   - Corrected model relationship `member__phone_numbers__phone_number` in Welfare overview search.
+   - Supports searching by member name, member number, phone number, and contribution number with `.distinct()` to prevent duplicate rows for members with multiple phones.
+   - Completely separates Coverage Year/Month filters (filtering `welfare_coverages__year` and `welfare_coverages__month`) from Payment Date range filters (`contribution_date__gte` and `contribution_date__lte`).
+   - Removed payment-year fallback from the coverage-year filter so a payment in 2026 for 2027 coverage appears strictly under coverage year 2027.
+   - Preserves active search queries and filters across pagination and resets.
 
-4. **Flexible Welfare Contribution Management**:
-   - No artificial dues, fixed quotas, or balances imposed.
-   - Supports explicit year and flexible months selection ("Whole Year" = 1–12, individual months, or multiple months).
-   - Dedicated Welfare Overview page (`/contributions/welfare/`) with member search, year/month filters, coverage metrics, 12-month coverage matrix grid, and direct receipt access.
-   - Annual payments are counted strictly once in financial totals (never multiplied by 12).
-   - Receipt detail, public verification, and PDF render coverage periods (e.g. `Whole Year 2026 (Jan – Dec)`).
+## 31.9 Remaining decisions and pending scope
 
-5. **Pending Decisions Maintained**:
-   - Welfare participant enrolment policy remains open (currently surfaces contributing members without auto-classifying all church members as debtors).
-   - Multi-category/multi-date flexibility is supported per row without enforcing artificial single-date constraints.
-   - Explicit monetary allocation by coverage month is not invented; actual received amounts remain intact.
+The following business choices remain open pending formal stakeholder confirmation:
+1. **Multi-category and multi-date batches**: The current implementation supports rows with different categories and payment dates in a single batch. Stakeholder decision pending on whether batches should optionally be restricted to a single category or date.
+2. **Partial vs whole-batch confirmation**: The implementation currently previews all rows and blocks invalid rows, allowing valid rows to proceed while clearly displaying row-by-row status. Stakeholder decision pending on whether any single invalid row should strictly block the entire batch preview.
+3. **Welfare participant enrolment policy**: Welfare overview currently displays all active contributing members. Specific enrolment/membership roster rules for non-contributing welfare participants remain pending.
+4. **Monthly monetary allocation**: Actual payment amounts are preserved intact and counted once (never divided or multiplied by covered month counts). Formal stakeholder decision pending if financial reporting requires an explicit accounting allocation rule.

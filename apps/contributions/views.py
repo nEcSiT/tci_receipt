@@ -489,9 +489,10 @@ class BulkContributionEntryView(View):
 
         preview_data = BulkContributionService.parse_and_validate_rows(rows_data, actor=request.user)
 
-        idempotency_token = uuid.uuid4().hex
-        request.session["bulk_contrib_valid_rows"] = preview_data["valid_rows"]
-        request.session["bulk_contrib_idempotency_token"] = idempotency_token
+        batch = BulkContributionService.create_batch_record(actor=request.user, preview_data=preview_data)
+        submission_token = batch.submission_token
+        request.session["bulk_contrib_submission_token"] = submission_token
+        request.session["bulk_contrib_idempotency_token"] = submission_token
 
         return render(
             request,
@@ -500,7 +501,8 @@ class BulkContributionEntryView(View):
                 "source": "on-screen",
                 "preview_data": preview_data,
                 "valid_rows_count": preview_data["valid_count"],
-                "idempotency_token": idempotency_token,
+                "submission_token": submission_token,
+                "idempotency_token": submission_token,
             },
         )
 
@@ -548,9 +550,10 @@ class BulkContributionUploadView(View):
             messages.error(request, error_msg)
             return redirect("contributions:bulk_upload")
 
-        idempotency_token = uuid.uuid4().hex
-        request.session["bulk_contrib_valid_rows"] = preview_data["valid_rows"]
-        request.session["bulk_contrib_idempotency_token"] = idempotency_token
+        batch = BulkContributionService.create_batch_record(actor=request.user, preview_data=preview_data)
+        submission_token = batch.submission_token
+        request.session["bulk_contrib_submission_token"] = submission_token
+        request.session["bulk_contrib_idempotency_token"] = submission_token
 
         return render(
             request,
@@ -560,7 +563,8 @@ class BulkContributionUploadView(View):
                 "filename": uploaded_file.name,
                 "preview_data": preview_data,
                 "valid_rows_count": preview_data["valid_count"],
-                "idempotency_token": idempotency_token,
+                "submission_token": submission_token,
+                "idempotency_token": submission_token,
             },
         )
 
@@ -596,33 +600,39 @@ class BulkContributionConfirmView(View):
         if not check_create_permission(request.user):
             raise PermissionDenied("You do not have permission to record contributions.")
 
-        valid_rows = request.session.get("bulk_contrib_valid_rows", [])
-        idempotency_token = (
-            request.POST.get("idempotency_token")
-            or request.session.get("bulk_contrib_idempotency_token")
-            or uuid.uuid4().hex
+        submission_token = (
+            request.POST.get("submission_token")
+            or request.POST.get("idempotency_token")
+            or request.session.get("bulk_contrib_submission_token")
         )
 
-        if not valid_rows:
+        if not submission_token or not str(submission_token).strip():
             messages.error(request, "No pending contribution batch was found. Please re-enter or re-upload your contributions.")
             return redirect("contributions:bulk_entry")
 
         try:
             result = BulkContributionService.execute_batch(
                 actor=request.user,
-                valid_rows=valid_rows,
-                idempotency_token=idempotency_token,
+                submission_token=submission_token.strip(),
             )
 
             # Clear session
             request.session.pop("bulk_contrib_valid_rows", None)
+            request.session.pop("bulk_contrib_submission_token", None)
             request.session.pop("bulk_contrib_idempotency_token", None)
 
-            messages.success(
-                request,
-                f"Successfully recorded {result['count']} contributions (GHS {result['total_amount']:.2f}) "
-                f"and generated individual receipts."
-            )
+            if result.get("is_replay"):
+                messages.info(
+                    request,
+                    f"This batch has already been processed ({result['count']} contributions, GHS {result['total_amount']:.2f}). "
+                    f"Displaying existing receipts."
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Successfully recorded {result['count']} contributions (GHS {result['total_amount']:.2f}) "
+                    f"and generated individual receipts."
+                )
 
             return render(
                 request,
@@ -678,13 +688,19 @@ class WelfareOverviewView(View):
         qs = Contribution.objects.filter(contribution_type=welfare_type)
 
         if query:
-            qs = qs.filter(
+            search_q = (
                 Q(member__first_name__icontains=query) |
                 Q(member__last_name__icontains=query) |
                 Q(member__member_number__icontains=query) |
-                Q(member__phones__phone_number__icontains=query) |
+                Q(member__phone_numbers__phone_number__icontains=query) |
                 Q(contribution_number__icontains=query)
             )
+            from apps.core.utils.phone import clean_phone_number, get_phone_lookup_variants
+            cleaned_phone = clean_phone_number(query)
+            if cleaned_phone:
+                for variant in get_phone_lookup_variants(cleaned_phone):
+                    search_q |= Q(member__phone_numbers__phone_number__icontains=variant)
+            qs = qs.filter(search_q)
 
         if date_from:
             qs = qs.filter(contribution_date__gte=date_from)
@@ -698,8 +714,7 @@ class WelfareOverviewView(View):
             )
         elif selected_year:
             qs = qs.filter(
-                Q(welfare_coverages__year=selected_year) |
-                Q(contribution_date__year=selected_year)
+                welfare_coverages__year=selected_year,
             )
 
         contributions = (

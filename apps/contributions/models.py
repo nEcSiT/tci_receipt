@@ -36,6 +36,13 @@ class ContributionStatus(models.TextChoices):
     FLAGGED = "FLAGGED", "Flagged for Review"
 
 
+class ContributionBatchStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending Confirmation"
+    PROCESSING = "PROCESSING", "Processing"
+    COMPLETED = "COMPLETED", "Completed"
+    FAILED = "FAILED", "Failed"
+
+
 class ContributionType(UUIDBaseModel):
     """
     Church contribution categories (Tithe, Thanksgiving, Higher Life Partners, etc.)
@@ -304,3 +311,51 @@ class WelfareCoverage(UUIDBaseModel):
 
     def __str__(self):
         return f"{self.get_month_display()} {self.year} ({self.contribution.contribution_number})"
+
+
+class ContributionBatch(UUIDBaseModel):
+    """
+    Persistent batch record binding a bulk contribution submission to a validated preview
+    and enforcing database-level concurrency protection and duplicate prevention.
+    Table: contribution_batches
+    """
+    submission_token = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="Database-enforced unique submission identifier.",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="bulk_contribution_batches",
+        help_text="The authorized staff user who created the preview.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=ContributionBatchStatus.choices,
+        default=ContributionBatchStatus.PENDING,
+        db_index=True,
+    )
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    row_count = models.PositiveIntegerField(default=0)
+    preview_data = models.JSONField(
+        default=list,
+        help_text="Snapshot of validated rows approved during preview.",
+    )
+    result_summary = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Summary of executed contributions and receipts for idempotent replay.",
+    )
+    error_message = models.TextField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "contribution_batches"
+        verbose_name = "Contribution Batch"
+        verbose_name_plural = "Contribution Batches"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Contribution Batch [{self.submission_token[:8]}] - {self.status} ({self.row_count} rows, GHS {self.total_amount})"

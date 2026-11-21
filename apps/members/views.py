@@ -18,6 +18,8 @@ from apps.members.models import (
     TemporaryContributorStatus,
     MemberMergeStatus,
     ContributorLinkingStatus,
+    MemberImportBatch,
+    MemberImportStatus,
 )
 from apps.members.services import (
     MemberService,
@@ -918,10 +920,32 @@ class MemberImportView(View):
             messages.error(request, error_msg)
             return render(request, "members/member_import.html", {"preview_mode": False}, status=400)
 
-        # Cache valid rows in session for the confirmation step
+        # Check for repeated upload of identical spreadsheet
+        file_hash = preview_data.get("file_hash", "")
+        existing_batch = MemberImportBatch.objects.filter(
+            file_hash=file_hash,
+            status=MemberImportStatus.COMPLETED,
+        ).first()
+
+        is_duplicate_file = existing_batch is not None
+        if is_duplicate_file:
+            messages.warning(
+                request,
+                f"Notice: An identical spreadsheet ('{existing_batch.filename}') was already imported on "
+                f"{existing_batch.completed_at.strftime('%Y-%m-%d %H:%M') if existing_batch.completed_at else 'earlier date'}. "
+                f"Please review rows carefully before confirming to prevent duplicate church members."
+            )
+
+        batch = MemberImportService.create_import_batch(
+            actor=request.user,
+            file_hash=file_hash,
+            filename=uploaded_file.name,
+            preview_data=preview_data,
+        )
+
+        request.session["member_import_token"] = batch.import_token
+
         valid_rows = [r for r in preview_data["rows"] if r["status"] == "READY"]
-        request.session["member_import_valid_rows"] = valid_rows
-        request.session["member_import_filename"] = uploaded_file.name
 
         return render(
             request,
@@ -931,6 +955,9 @@ class MemberImportView(View):
                 "filename": uploaded_file.name,
                 "preview_data": preview_data,
                 "valid_rows_count": len(valid_rows),
+                "review_required_count": preview_data.get("review_required_count", 0),
+                "import_token": batch.import_token,
+                "is_duplicate_file": is_duplicate_file,
             },
         )
 
@@ -947,23 +974,37 @@ class MemberImportConfirmView(View):
         if not (request.user.is_system_administrator or request.user.has_permission("member.create")):
             raise PermissionDenied("You do not have permission to import members.")
 
-        valid_rows = request.session.get("member_import_valid_rows", [])
-        if not valid_rows:
-            messages.error(request, "No pending member import rows were found. Please re-upload your Excel file.")
+        import_token = request.POST.get("import_token") or request.session.get("member_import_token")
+        if not import_token:
+            messages.error(request, "No pending member import batch was found. Please re-upload your Excel file.")
             return redirect("members:member_import")
+
+        confirm_phoneless = request.POST.get("confirm_phoneless") in ["1", "true", "True"]
 
         from apps.members.services import MemberImportService
 
         try:
-            result = MemberImportService.execute_import(actor=request.user, valid_rows=valid_rows)
+            result = MemberImportService.execute_import(
+                actor=request.user,
+                import_token=import_token,
+                confirm_phoneless=confirm_phoneless,
+            )
             # Clear session
+            request.session.pop("member_import_token", None)
             request.session.pop("member_import_valid_rows", None)
             request.session.pop("member_import_filename", None)
 
-            messages.success(
-                request,
-                f"Successfully imported {result['imported_count']} church members."
-            )
+            if result.get("is_replay"):
+                messages.info(
+                    request,
+                    f"This import has already been completed ({result['imported_count']} members imported). "
+                    f"Displaying previous results."
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Successfully imported {result['imported_count']} church members."
+                )
             return render(
                 request,
                 "members/member_import_results.html",

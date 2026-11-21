@@ -1,5 +1,6 @@
 import logging
 import uuid
+import hashlib
 from django.db import transaction
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils import timezone
@@ -19,6 +20,8 @@ from apps.members.models import (
     TemporaryContributorStatus,
     MemberMergeStatus,
     ContributorLinkingStatus,
+    MemberImportBatch,
+    MemberImportStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -1046,6 +1049,9 @@ class MemberImportService:
             raise PermissionDenied("You do not have permission to import members.")
 
         try:
+            file_bytes = file_obj.read()
+            file_hash = hashlib.sha256(file_bytes).hexdigest()
+            file_obj.seek(0)
             wb = openpyxl.load_workbook(file_obj, data_only=True)
         except Exception as e:
             raise ValidationError(f"Unable to read Excel file: {str(e)}")
@@ -1092,6 +1098,7 @@ class MemberImportService:
         parsed_rows = []
         valid_count = 0
         conflict_count = 0
+        review_required_count = 0
         error_count = 0
 
         for row_num, row_values in enumerate(rows_iter, start=2):
@@ -1158,9 +1165,33 @@ class MemberImportService:
                         matched_member_info = f"{m.full_name} ({m.member_number})"
                         row_errors.append(f"This phone number is already registered to another member ({matched_member_info}).")
                         status = "CONFLICT"
+            else:
+                # No phone number provided
+                # PRD rule: Flag for staff review before creating potentially duplicate members.
+                # Do NOT identify or merge people solely by name.
+                if status != "ERROR":
+                    existing_m = Member.objects.filter(
+                        first_name__iexact=first_name,
+                        last_name__iexact=last_name,
+                        status=MemberStatus.ACTIVE,
+                    ).first()
+                    if existing_m:
+                        matched_member_info = f"{existing_m.full_name} ({existing_m.member_number})"
+                        row_errors.append(
+                            f"No phone number provided and a member with this name already exists ({matched_member_info}). "
+                            f"Requires staff review to prevent creating duplicate members."
+                        )
+                        status = "REVIEW_REQUIRED"
+                    else:
+                        row_errors.append(
+                            "No phone number provided. Requires staff review before creating a member record without phone contact."
+                        )
+                        status = "REVIEW_REQUIRED"
 
             if status == "READY":
                 valid_count += 1
+            elif status == "REVIEW_REQUIRED":
+                review_required_count += 1
             elif status == "CONFLICT":
                 conflict_count += 1
             else:
@@ -1182,23 +1213,108 @@ class MemberImportService:
             })
 
         return {
+            "file_hash": file_hash,
             "total_rows": len(parsed_rows),
             "valid_count": valid_count,
             "conflict_count": conflict_count,
+            "review_required_count": review_required_count,
             "error_count": error_count,
             "rows": parsed_rows,
         }
 
     @classmethod
-    @transaction.atomic
-    def execute_import(cls, actor: User, valid_rows: list[dict]) -> dict:
+    def create_import_batch(
+        cls,
+        actor: User,
+        file_hash: str,
+        filename: str,
+        preview_data: dict,
+    ) -> MemberImportBatch:
         if not actor.is_system_administrator and not actor.has_permission("member.create"):
             raise PermissionDenied("You do not have permission to import members.")
 
+        token = uuid.uuid4().hex
+        batch = MemberImportBatch.objects.create(
+            import_token=token,
+            file_hash=file_hash,
+            filename=filename,
+            created_by=actor,
+            status=MemberImportStatus.PENDING,
+            total_rows=preview_data.get("total_rows", 0),
+            valid_count=preview_data.get("valid_count", 0),
+            conflict_count=preview_data.get("conflict_count", 0),
+            review_required_count=preview_data.get("review_required_count", 0),
+            error_count=preview_data.get("error_count", 0),
+            row_data=preview_data.get("rows", []),
+        )
+        return batch
+
+    @classmethod
+    @transaction.atomic
+    def execute_import(
+        cls,
+        actor: User,
+        valid_rows: list[dict] | None = None,
+        import_token: str | None = None,
+        confirm_phoneless: bool = False,
+    ) -> dict:
+        if not actor.is_system_administrator and not actor.has_permission("member.create"):
+            raise PermissionDenied("You do not have permission to import members.")
+
+        token = import_token
+        batch = None
+        if token:
+            batch = MemberImportBatch.objects.select_for_update().filter(import_token=token).first()
+
+        if not batch:
+            if valid_rows is not None:
+                token = token or uuid.uuid4().hex
+                batch = MemberImportBatch.objects.create(
+                    import_token=token,
+                    file_hash=uuid.uuid4().hex,
+                    filename="programmatic_import.xlsx",
+                    created_by=actor,
+                    status=MemberImportStatus.PENDING,
+                    total_rows=len(valid_rows),
+                    valid_count=len(valid_rows),
+                    row_data=valid_rows,
+                )
+                batch = MemberImportBatch.objects.select_for_update().filter(id=batch.id).first()
+            else:
+                raise ValidationError("Invalid, altered, or expired import token.")
+
+        if batch.created_by != actor and not actor.is_system_administrator:
+            raise PermissionDenied("You do not have permission to confirm this member import.")
+
+        if batch.status == MemberImportStatus.COMPLETED:
+            member_ids = batch.result_summary.get("member_ids", [])
+            members = list(Member.objects.filter(id__in=member_ids))
+            return {
+                "batch": batch,
+                "imported_count": len(members),
+                "skipped_count": batch.result_summary.get("skipped_count", 0),
+                "created_members": members,
+                "is_replay": True,
+            }
+
+        if batch.status == MemberImportStatus.PROCESSING:
+            raise ValidationError("This member import is currently being processed by another request. Please wait.")
+
+        batch.status = MemberImportStatus.PROCESSING
+        batch.save(update_fields=["status"])
+
+        rows_to_process = batch.row_data or valid_rows or []
         created_members = []
         skipped_count = 0
 
-        for r in valid_rows:
+        for r in rows_to_process:
+            st = r.get("status")
+            if st == "READY" or (st == "REVIEW_REQUIRED" and confirm_phoneless):
+                pass
+            else:
+                skipped_count += 1
+                continue
+
             phone = r.get("phone_number", "").strip()
             # Double check concurrency phone conflict under lock
             if phone:
@@ -1224,12 +1340,22 @@ class MemberImportService:
             )
             created_members.append(new_m)
 
+        batch.status = MemberImportStatus.COMPLETED
+        batch.completed_at = timezone.now()
+        batch.result_summary = {
+            "imported_count": len(created_members),
+            "skipped_count": skipped_count,
+            "member_ids": [str(m.id) for m in created_members],
+        }
+        batch.save(update_fields=["status", "completed_at", "result_summary"])
+
         AuditService.log(
             action="MEMBERS_EXCEL_IMPORTED",
-            entity_type="Member",
-            entity_id=actor.id,
+            entity_type="MemberImportBatch",
+            entity_id=batch.id,
             user=actor,
             new_values={
+                "import_token": batch.import_token,
                 "imported_count": len(created_members),
                 "skipped_conflicts": skipped_count,
                 "created_member_numbers": [m.member_number for m in created_members[:50]],
@@ -1238,7 +1364,9 @@ class MemberImportService:
         )
 
         return {
+            "batch": batch,
             "imported_count": len(created_members),
             "skipped_count": skipped_count,
             "created_members": created_members,
+            "is_replay": False,
         }

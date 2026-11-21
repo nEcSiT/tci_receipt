@@ -30,6 +30,13 @@ class ContributorLinkingStatus(models.TextChoices):
     REJECTED = "REJECTED", "Rejected"
 
 
+class MemberImportStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending Confirmation"
+    PROCESSING = "PROCESSING", "Processing"
+    COMPLETED = "COMPLETED", "Completed"
+    FAILED = "FAILED", "Failed"
+
+
 class Member(UUIDBaseModel):
     """
     Permanent church member entity.
@@ -273,3 +280,52 @@ class ContributorLinkingRequest(UUIDBaseModel):
 
     def __str__(self):
         return f"Link {self.temporary_contributor.phone_number} -> {self.target_member.full_name} [{self.status}]"
+
+
+class MemberImportBatch(UUIDBaseModel):
+    """
+    Persistent batch record tracking Excel member import sessions and outcomes.
+    Enforces concurrency protection, duplicate prevention, and staff review tracking.
+    Table: member_import_batches
+    """
+    import_token = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="Database-enforced unique import token.",
+    )
+    file_hash = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text="SHA-256 hash of the uploaded Excel file content for duplicate upload detection.",
+    )
+    filename = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="member_import_batches",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=MemberImportStatus.choices,
+        default=MemberImportStatus.PENDING,
+        db_index=True,
+    )
+    total_rows = models.PositiveIntegerField(default=0)
+    valid_count = models.PositiveIntegerField(default=0)
+    conflict_count = models.PositiveIntegerField(default=0)
+    review_required_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    row_data = models.JSONField(default=list)
+    result_summary = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "member_import_batches"
+        verbose_name = "Member Import Batch"
+        verbose_name_plural = "Member Import Batches"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Member Import [{self.import_token[:8]}] - {self.filename} ({self.status})"
